@@ -1,11 +1,10 @@
 #[macro_use] extern crate rocket;
 
-#[get("/hello")]
-fn index() -> &'static str {
-    "Hello, world!"
-}
+mod group;
 
 #[launch]
 fn rocket() -> _ {
-    rocket::build().mount("/", routes![index])
+    rocket::build().mount("/", routes![
+        group::new_group
+    ])
 }
