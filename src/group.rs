@@ -1,7 +1,10 @@
 use std::sync::Mutex;
 
 use crate::server_data::{Answer, ServerData};
-use rocket::{State, response::content, serde::{json::Json, Serialize}};
+use rocket::{
+    serde::json::Json,
+    State,
+};
 
 #[post("/new", format = "application/json", data = "<group>")]
 pub fn new_group(server_data: &State<Mutex<ServerData>>, group: String) -> String {
@@ -15,22 +18,22 @@ pub fn new_group(server_data: &State<Mutex<ServerData>>, group: String) -> Strin
     format!("Gruppe \"{group}\" wurde empfangen!")
 }
 
-type GroupResponse = Vec<(String, isize, Option<Answer>)>; 
+type GroupResponse = Vec<(String, isize, Option<Answer>)>;
 
 #[get("/get")]
-pub fn get_all_groups(
-    server_data: &State<Mutex<ServerData>>,
-) -> Json<GroupResponse> {
+pub fn get_all_groups(server_data: &State<Mutex<ServerData>>) -> Json<GroupResponse> {
     let lock = server_data.lock().unwrap();
 
-    Json(lock.groups
-        .iter()
-        .map(|(group_name, group_data)| {
-            (
-                group_name.clone(),
-                group_data.score,
-                group_data.answer.clone(),
-            )
-        })
-        .collect())
+    Json(
+        lock.groups
+            .iter()
+            .map(|(group_name, group_data)| {
+                (
+                    group_name.clone(),
+                    group_data.score,
+                    group_data.answer.clone(),
+                )
+            })
+            .collect(),
+    )
 }

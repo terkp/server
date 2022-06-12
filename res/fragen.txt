@@ -1,0 +1,20 @@
+normal#Dies ist ein Test bitte a: richtig antworten#richtig#falsch#falsch#falsch#a
+sortier#Sortiere die in Deutschland beliebtesten Gemuesesorten aufsteigend (Pro-Kopf-Konsum)#Tomate#Karotte#Zwiebel#Gurke#d#c#b#a
+normal#Welches der Tiere kommt nicht in dem Kinderlied "Alle meine Entchen" vor?#Spatzen#Tauben#Gänse#Hühner#a
+normal#Wie weit ist das Gewitter entfernt, wenn der Donner 10 s nach dem Blitz zu hören ist?#2850#2950#3400#4300#c
+schaetzen#Wenn jemand ein Quäntchen Glück hat, wie viel Gramm Glück entspricht es?#4
+normal#Wo sind die Langerhans-Inseln?#im Straßenverkehr#im menschlichen Körper#im Nicaragua See#in Animal Crossing#b
+schaetzen#Wie viel Scheiben Toast könnte ein Blitz ungefähr toasten?#100000
+normal#Welches ist das bisher meistgespielte Lied auf Spotify?#Desperado#Dance Monkey#Closer#Shape of you#d
+normal#Was ist die Cherophobie#Angst vor Glücklichsein#Angst vor Schwarz(Farbe)#Angst vor Sängerinnen#Angst vor Indianern#a
+schaetzen#Wie groß ist die größte gemessene Schneeflocke in mm(Durchmesser)?#380
+normal#Womit lässt sich Rost lösen?#Pepsi#Coca Cola#Sprite#Soda#c
+sortier#Sortiere diese Schauspieler aufsteigend nach der Anzahl ihrer Oscars in der Katogorie "Best Actor"!#Tom Hanks# Daniel Day-Lewis#Leonardo DiCaprio#George Clooney#d#c#a#b
+normal#Welches der Tiere gehört nicht zur Familie der Hundeartigen?#Katze#Hund#Walross#Bär#a
+schaetzen#Wie viele Windeln braucht ein Baby/Kleinkind im Durchschnitt bis es trocken ist?#6000
+normal#Welches der folgenden Wesen wird im Psalm 22,22 in der Lutherbibel 1912 erwähnt?#Leviathan#Schlangen#Einhörner#Drachen#c#
+normal#Welches der folgender Elemente war Bestandteil von Gesichtscremes Anfang des 20. Jahrhunderts?#Radium#Arsen#Antimon#Digimon#a
+normal#Wie viele Herzen hat ein Oktopus?#1#2#3#4#c
+normal#Seit wann gibt es das "Spiel des Jahres"?#1973#1979#1983#1989#b
+sortier#Sortiere die nachfolgenden Ereignisse aufsteigend nach dem Jahr in dem sie stattfanden!#Eröffnung der Londoner U-Bahn#William Shakespeare wird geboren#Das kommunistische China wird gegründet#Erste transkontinentale Eisenbahn wird in der Usa eröffnet#b#a#d#c
+sortier#Keine Frage, Quiz vorbei#wirklich vorbei#Frage nur aus#Sicherheitsgründen#Lösung errät ihr nie#c#a#d#b
