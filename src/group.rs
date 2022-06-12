@@ -15,9 +15,7 @@ pub fn new_group(server_data: &State<Mutex<ServerData>>, group: String) -> Strin
     format!("Gruppe \"{group}\" wurde empfangen!")
 }
 
-
-#[derive(Serialize)]
-pub struct GroupResponse (Vec<(String, isize, Option<Answer>)>);
+type GroupResponse = Vec<(String, isize, Option<Answer>)>; 
 
 #[get("/get")]
 pub fn get_all_groups(
@@ -25,7 +23,7 @@ pub fn get_all_groups(
 ) -> Json<GroupResponse> {
     let lock = server_data.lock().unwrap();
 
-    Json(GroupResponse(lock.groups
+    Json(lock.groups
         .iter()
         .map(|(group_name, group_data)| {
             (
@@ -34,5 +32,5 @@ pub fn get_all_groups(
                 group_data.answer.clone(),
             )
         })
-        .collect()))
+        .collect())
 }
