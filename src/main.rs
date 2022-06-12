@@ -3,11 +3,9 @@ use std::sync::Mutex;
 #[macro_use]
 extern crate rocket;
 
-#[macro_use]
-extern crate serde;
-
 mod group;
 mod server_data;
+mod questions;
 
 #[launch]
 fn rocket() -> _ {
@@ -16,5 +14,8 @@ fn rocket() -> _ {
         .mount("/groups/", routes![
             group::new_group,
             group::get_all_groups
+        ])
+        .mount("/questions/", routes![
+            questions::load_questions
         ])
 }

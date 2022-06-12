@@ -11,8 +11,8 @@ pub fn new_group(server_data: &State<Mutex<ServerData>>, group: String) -> Strin
     let mut lock = server_data.lock().unwrap();
 
     lock.insert_group(&group);
-
     println!("{:?}", lock.groups);
+    drop(lock);
 
     // Irgendwas machen
     format!("Gruppe \"{group}\" wurde empfangen!")

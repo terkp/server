@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use serde::Serialize;
 
@@ -80,6 +80,98 @@ impl Question {
             ],
             solution: [solution[0], solution[1], solution[2], solution[3]],
         }
+    }
+}
+
+impl FromStr for Question {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut split = s.split("#");
+
+        let question_type = match split.next() {
+            Some(val) if val == "normal" || val == "sortier" || val == "schaetzen" => val,
+            None | Some(_) => return Err("No question type found"),
+        };
+
+        let question = match split.next() {
+            Some(val) => val,
+            None => return Err("No question text found"),
+        };
+
+        match question_type {
+            "normal" => {
+                let mut answers: [String; 4] = Default::default();
+                for i in 0..4 {
+                    answers[i] = match split.next() {
+                        Some(val) => val.to_owned(),
+                        None => return Err("Answer not found"),
+                    }
+                }
+
+                let solution = {
+                    let so = match split.next() {
+                        Some(val) => val,
+                        None => return Err("No solution found"),
+                    };
+
+                    match so {
+                        "a" => 0,
+                        "b" => 1,
+                        "c" => 2,
+                        "d" => 3,
+                        _ => return Err("Invalid solution")
+                    }
+                };
+
+                Ok(Question::normal(question, &answers, solution))
+            },
+
+            "schaetzen" => {
+                let solution = {
+                    let so = match split.next() {
+                        Some(val) => val,
+                        None => return Err("No solution found"),
+                    };
+
+                    match so.parse::<f64>() {
+                        Ok(val) => val,
+                        _ => return Err("Estimate solution not a number")
+                    }
+                };
+                
+                Ok(Question::estimate(question, solution))
+            },
+            "sortier" => {
+                let mut answers: [String; 4] = Default::default();
+                for i in 0..4 {
+                    answers[i] = match split.next() {
+                        Some(val) => val.to_owned(),
+                        None => return Err("Answer not found"),
+                    }
+                }
+                let mut solutions = [0usize; 4];
+                for i in 0..4 {
+                    let so = match split.next() {
+                        Some(val) => val,
+                        None => return Err("Answer not found"),
+                    };
+
+
+                    solutions[i] = match so {
+                        "a" => 0,
+                        "b" => 1,
+                        "c" => 2,
+                        "d" => 3,
+                        _ => return Err("Invalid solution")
+                    };
+                }
+
+                Ok(Question::sort(question, &answers, &solutions))
+            }
+            _ => Err("?")
+        }
+
     }
 }
 
