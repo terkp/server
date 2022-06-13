@@ -1,0 +1,11 @@
+{% extends "display/index" %}
+{% block question_content%}
+<h1>Schätzfrage</h1>
+
+<h2>{{ question }}</h2>
+
+{{ answers }}
+
+Lösung: {{ solution }}
+
+{% endblock question_content%}

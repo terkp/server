@@ -1,0 +1,6 @@
+{% extends "display/index" %}
+{% block question_content %}
+<h1>Frage</h1>
+
+<h2>{{ question }}</h2>
+{% endblock question_content%}

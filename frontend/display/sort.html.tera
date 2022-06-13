@@ -1,0 +1,13 @@
+{% extends "display/index" %}
+{% block question_content%}
+<h1>Sortierfrage</h1>
+
+<h2>{{ question }}</h2>
+
+A: {{ answers[0] }}<br>
+B: {{ answers[1] }}<br>
+C: {{ answers[2] }}<br>
+D: {{ answers[3] }}<br>
+
+
+{% endblock question_content%}
