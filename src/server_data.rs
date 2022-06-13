@@ -1,27 +1,35 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    sync::atomic::AtomicUsize,
+};
 
+use rocket::tokio::sync::Mutex;
 use serde::Serialize;
 
 #[derive(Default, Debug)]
 pub struct ServerData {
-    pub groups: HashMap<String, GroupData>,
-    pub questions: Vec<Question>,
-    pub current_question: usize,
+    pub groups: Mutex<HashMap<String, GroupData>>,
+    pub questions: Mutex<Vec<Question>>,
+    pub current_question: AtomicUsize,
 }
 
 impl ServerData {
-    pub fn insert_group(&mut self, name: &str) {
-        self.groups.insert(name.to_owned(), GroupData::default());
+    pub async fn insert_group(&self, name: &str) {
+        self.groups
+            .lock()
+            .await
+            .insert(name.to_owned(), GroupData::default());
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Serialize)]
 pub struct GroupData {
     pub score: isize,
     pub answer: Option<Answer>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Question {
     Normal {
         question: String,
@@ -120,12 +128,12 @@ impl FromStr for Question {
                         "b" => 1,
                         "c" => 2,
                         "d" => 3,
-                        _ => return Err("Invalid solution")
+                        _ => return Err("Invalid solution"),
                     }
                 };
 
                 Ok(Question::normal(question, &answers, solution))
-            },
+            }
 
             "schaetzen" => {
                 let solution = {
@@ -136,12 +144,12 @@ impl FromStr for Question {
 
                     match so.parse::<f64>() {
                         Ok(val) => val,
-                        _ => return Err("Estimate solution not a number")
+                        _ => return Err("Estimate solution not a number"),
                     }
                 };
-                
+
                 Ok(Question::estimate(question, solution))
-            },
+            }
             "sortier" => {
                 let mut answers: [String; 4] = Default::default();
                 for i in 0..4 {
@@ -157,21 +165,19 @@ impl FromStr for Question {
                         None => return Err("Answer not found"),
                     };
 
-
                     solutions[i] = match so {
                         "a" => 0,
                         "b" => 1,
                         "c" => 2,
                         "d" => 3,
-                        _ => return Err("Invalid solution")
+                        _ => return Err("Invalid solution"),
                     };
                 }
 
                 Ok(Question::sort(question, &answers, &solutions))
             }
-            _ => Err("?")
+            _ => Err("?"),
         }
-
     }
 }
 
