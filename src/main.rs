@@ -32,7 +32,8 @@ fn rocket() -> _ {
         )
         .mount("/display", routes![
             display::show_display,
-            display::events
+            display::events,
+            display::send_event
         ])
         .attach(Template::fairing())
 }

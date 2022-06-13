@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use rocket::{State, response::stream::{Event, EventStream}};
+use rocket::{State, response::stream::{Event, EventStream}, http::Status};
 use rocket_dyn_templates::{Template, context};
 use rocket::tokio::time::{self, Duration};
 
@@ -41,12 +41,19 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
 }
 
 #[get("/events")]
-pub fn events() -> EventStream![] {
+pub async fn events(server_data: &State<ServerData>) -> EventStream![Event + '_] {
+    let display_buffer = &server_data.display_buffer;
     EventStream! {
-        let mut interval = time::interval(Duration::from_secs(1));
         loop {
-            yield Event::data("ping");
-            interval.tick().await;
+            yield display_buffer.pop().await;
         }
     }
+}
+
+
+#[get("/send_event/<text>")]
+pub async fn send_event(server_data: &State<ServerData>, text: String) -> Status {
+    let display_buffer = &server_data.display_buffer;
+    display_buffer.push(Event::data(text)).unwrap();
+    Status::Ok
 }

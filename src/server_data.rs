@@ -1,10 +1,11 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     str::FromStr,
     sync::atomic::AtomicUsize,
 };
 
-use rocket::tokio::sync::Mutex;
+use crossbeam::queue::ArrayQueue;
+use rocket::{tokio::sync::{Mutex, Semaphore}, response::stream::Event};
 use serde::Serialize;
 
 #[derive(Default, Debug)]
@@ -12,6 +13,10 @@ pub struct ServerData {
     pub groups: Mutex<HashMap<String, GroupData>>,
     pub questions: Mutex<Vec<Question>>,
     pub current_question: AtomicUsize,
+    pub display_buffer: EventBuffer,
+    // nächste frage event -> event_buffer
+    // ui <- nächste frage event
+    // display <- ????
 }
 
 impl ServerData {
@@ -21,7 +26,43 @@ impl ServerData {
             .await
             .insert(name.to_owned(), GroupData::default());
     }
+
+    pub fn register_display_event(&self, event: Event) -> Result<(), Event> {
+        self.display_buffer.push(event)
+    }
 }
+
+#[derive(Debug)]
+pub struct EventBuffer(ArrayQueue<Event>, Semaphore);
+
+impl EventBuffer {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn with_capacity(cap: usize) -> Self {
+        Self(ArrayQueue::new(16), Semaphore::new(0))
+    }
+
+    pub fn push(&self, event: Event) -> Result<(), Event> {
+        let res = self.0.push(event);
+        self.1.add_permits(1);
+        res
+    }
+
+    pub async fn pop(&self) -> Event {
+        let permit = self.1.acquire().await.unwrap();
+        permit.forget();
+        self.0.pop().unwrap()
+    }
+}
+
+impl Default for EventBuffer {
+    fn default() -> Self {
+        Self(ArrayQueue::new(16), Semaphore::new(0))
+    }
+}
+
 
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct GroupData {
