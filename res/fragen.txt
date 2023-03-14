@@ -17,4 +17,4 @@ normal#Welches der folgender Elemente war Bestandteil von Gesichtscremes Anfang 
 normal#Wie viele Herzen hat ein Oktopus?#1#2#3#4#c
 normal#Seit wann gibt es das "Spiel des Jahres"?#1973#1979#1983#1989#b
 sortier#Sortiere die nachfolgenden Ereignisse aufsteigend nach dem Jahr in dem sie stattfanden!#Eröffnung der Londoner U-Bahn#William Shakespeare wird geboren#Das kommunistische China wird gegründet#Erste transkontinentale Eisenbahn wird in der Usa eröffnet#b#a#d#c
-sortier#Keine Frage, Quiz vorbei#wirklich vorbei#Frage nur aus#Sicherheitsgründen#Lösung errät ihr nie#c#a#d#b
+sortier#Keine Frage, Quiz vorbei,#wirklich vorbei#Frage nur aus#Sicherheitsgründen#Lösung errät ihr nie#c#a#d#b
