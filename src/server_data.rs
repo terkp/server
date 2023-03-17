@@ -3,7 +3,7 @@ use std::{
     str::FromStr,
     sync::atomic::AtomicUsize,
 };
-
+use std::collections::hash_map::Entry;
 use crossbeam::queue::ArrayQueue;
 use rocket::{tokio::sync::{Mutex, Semaphore}, response::stream::Event};
 use serde::Serialize;
@@ -29,6 +29,27 @@ impl ServerData {
 
     pub fn register_display_event(&self, event: Event) -> Result<(), Event> {
         self.display_buffer.push(event)
+    }
+    pub async fn set_group_points(&self,name:String,number: isize,set:bool) {
+        let name_s = name.clone();
+        let mut map = self.groups.lock().await.clone();
+        let matches = match map.entry(name_s) {
+            Entry::Occupied(o) => o,
+            _ => panic!("Group not found"),
+        };
+        let G_data: &GroupData = matches.get();
+        let mut new_GroupData = G_data.clone();
+        let score:isize;
+        if set == false{
+            score = new_GroupData.score + number;
+            
+        }
+        else {
+            score = number;
+        }
+        new_GroupData.score = score;
+        self.groups.lock().await.entry(name).and_modify(|e| {*e =new_GroupData});
+        
     }
 }
 

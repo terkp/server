@@ -21,7 +21,7 @@ fn rocket() -> _ {
     rocket::build()
         .manage(server_data::ServerData::default())
         .mount("/", routes![files])
-        .mount("/groups/", routes![group::new_group, group::get_all_groups])
+        .mount("/groups/", routes![group::new_group, group::get_all_groups, group::set_points])
         .mount(
             "/questions/",
             routes![
