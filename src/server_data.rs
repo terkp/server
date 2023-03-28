@@ -51,6 +51,17 @@ impl ServerData {
         self.groups.lock().await.entry(name).and_modify(|e| {*e =new_GroupData});
         
     }
+    pub async fn set_group_answer(&self,name:String, answer:Answer) {
+        let name_s = name.clone();
+        let mut map = self.groups.lock().await.clone();
+        let matches = match map.entry(name_s) {
+            Entry::Occupied(o) => o,
+            _ => panic!("Group not found"),
+        };
+        let G_data: &GroupData = matches.get();
+        let mut new_GroupData = G_data.clone();
+        new_GroupData.answer = Some(answer);
+    }
 }
 
 #[derive(Debug)]

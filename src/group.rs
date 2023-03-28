@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
-use crate::server_data::{GroupData, ServerData};
+use crate::server_data::{GroupData, ServerData, Answer};
 use rocket::{http::Status,serde::json::Json, State};
 use serde_json::json;
 use serde_json::{Value, Error};
@@ -42,6 +42,70 @@ pub async fn set_points(server_data: &State<ServerData>, name_number: &str) -> R
     Ok("OK".to_string())
 }
 
+#[post("/set_answer", format ="application/json", data = "<answer_data>")]
+pub async fn set_answer(server_data: &State<ServerData>, answer_data: &str) -> Result<String, String> {
+    let v: Value = match serde_json::from_str(answer_data){
+        Ok(text) => text,
+        _ => json!(null),
+    };
+    if v == json!(null){
+        return Err("Error by reading!".to_string())
+    };
+    let answer_type_temp = v["type"].as_str();
+    let answer_type = answer_type_temp.as_deref().unwrap();
+    let answer: Answer;
+    if answer_type == "normal" {
+        let answer_0_temp = v["answer_0"].as_str();
+        let answer_0 = answer_0_temp.as_deref().unwrap();
+        answer = Answer::Normal(answer_to_number(answer_0));
+        match answer {
+            Answer::Normal(n) => if n == 10 { return Err(("Error by reading".to_string()));},
+            _ => return Err("Error by reading".to_string()),
+        }
+
+    }
+    else if answer_type == "schaetzen" {
+        let answer_0_temp = v["answer_0"].as_str();
+        let answer_0 = answer_0_temp.as_deref().unwrap();
+        match answer_0.parse::<f64>() {
+            Ok(n) => answer = Answer::Estimate(n),
+            Err(e) =>  return Err("Error by reading answer!".to_string()),
+          }
+    }
+    else if answer_type == "sortier" {
+        let answer_0_temp = v["answer_0"].as_str();
+        let answer_0 = answer_0_temp.as_deref().unwrap();
+        answer = Answer::Sort(convert_letters_to_numbers(answer_0));
+
+    }
+    let name_temp = v["name"].as_str();
+    let name = name_temp.as_deref().unwrap();
+    Ok("OK".to_string())
+}
+pub fn answer_to_number(input:&str) -> usize{
+    match input {
+        "a" => 0,
+        "b" => 1,
+        "c" => 2,
+        "d" => 3,
+        _ => 10,
+    }
+}
+pub fn convert_letters_to_numbers(letters: &str) -> [usize; 4] {
+    let mut numbers = [0; 4];
+
+    for (i, letter) in letters.chars().enumerate() {
+        match letter {
+            'a' => numbers[i] = 0,
+            'b' => numbers[i] = 1,
+            'c' => numbers[i] = 2,
+            'd' => numbers[i] = 3,
+            _ => panic!("Invalid letter: {}", letter),
+        }
+    }
+
+    numbers
+}
 //#[get("/get")]
 //pub fn get_group_data(server_data: &State<Mutex<ServerData>>) -> Json<(String, isize, Option<Answer>)> {
 
