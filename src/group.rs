@@ -53,33 +53,38 @@ pub async fn set_answer(server_data: &State<ServerData>, answer_data: &str) -> R
     };
     let answer_type_temp = v["type"].as_str();
     let answer_type = answer_type_temp.as_deref().unwrap();
-    let answer: Answer;
+    let answer: Option<Answer>;
     if answer_type == "normal" {
         let answer_0_temp = v["answer_0"].as_str();
         let answer_0 = answer_0_temp.as_deref().unwrap();
-        answer = Answer::Normal(answer_to_number(answer_0));
-        match answer {
-            Answer::Normal(n) => if n == 10 { return Err(("Error by reading".to_string()));},
-            _ => return Err("Error by reading".to_string()),
-        }
+        answer = Some(Answer::Normal(answer_to_number(answer_0)));
 
     }
     else if answer_type == "schaetzen" {
         let answer_0_temp = v["answer_0"].as_str();
         let answer_0 = answer_0_temp.as_deref().unwrap();
         match answer_0.parse::<f64>() {
-            Ok(n) => answer = Answer::Estimate(n),
+            Ok(n) => answer = Some(Answer::Estimate(n)),
             Err(e) =>  return Err("Error by reading answer!".to_string()),
           }
     }
     else if answer_type == "sortier" {
         let answer_0_temp = v["answer_0"].as_str();
         let answer_0 = answer_0_temp.as_deref().unwrap();
-        answer = Answer::Sort(convert_letters_to_numbers(answer_0));
+        answer = Some(Answer::Sort(convert_letters_to_numbers(answer_0)));
 
     }
+    else {
+        answer = None;
+    }
+
     let name_temp = v["name"].as_str();
     let name = name_temp.as_deref().unwrap();
+    let name_s = String::from(name);
+    match answer {
+        Some(v) => server_data.set_group_answer(name_s,v).await,
+        None => panic!("Error by reading, no answer found"),
+    }
     Ok("OK".to_string())
 }
 pub fn answer_to_number(input:&str) -> usize{
@@ -88,7 +93,7 @@ pub fn answer_to_number(input:&str) -> usize{
         "b" => 1,
         "c" => 2,
         "d" => 3,
-        _ => 10,
+        _ => panic!("Error by reading"),
     }
 }
 pub fn convert_letters_to_numbers(letters: &str) -> [usize; 4] {

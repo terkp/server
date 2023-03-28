@@ -61,6 +61,7 @@ impl ServerData {
         let G_data: &GroupData = matches.get();
         let mut new_GroupData = G_data.clone();
         new_GroupData.answer = Some(answer);
+        self.groups.lock().await.entry(name).and_modify(|e| {*e =new_GroupData});
     }
 }
 
