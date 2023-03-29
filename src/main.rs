@@ -27,7 +27,8 @@ fn rocket() -> _ {
             routes![
                 questions::load_questions,
                 questions::current_question,
-                questions::next_question
+                questions::next_question,
+                questions::results
             ],
         )
         .mount("/display", routes![

@@ -7,6 +7,12 @@ use std::collections::hash_map::Entry;
 use crossbeam::queue::ArrayQueue;
 use rocket::{tokio::sync::{Mutex, Semaphore}, response::stream::Event};
 use serde::Serialize;
+use std::sync::atomic::Ordering;
+
+static NORMAL_POINTS:isize = 1;
+static SORT_POINTS:isize = 1;
+static ESTIMATE_1_POINTS:isize = 2;
+static ESTIMATE_2_POINTS:isize = 1;
 
 #[derive(Default, Debug)]
 pub struct ServerData {
@@ -62,6 +68,84 @@ impl ServerData {
         let mut new_GroupData = G_data.clone();
         new_GroupData.answer = Some(answer);
         self.groups.lock().await.entry(name).and_modify(|e| {*e =new_GroupData});
+    }
+    pub async fn results(&self){
+        if self.current_question.load(Ordering::Relaxed)
+        >= self.questions.lock().await.len()
+    {
+        panic!("Error by loading question");
+    }
+    let current_question_idx = self.current_question.load(Ordering::Relaxed);
+    let question = self.questions.lock().await[current_question_idx].clone();
+
+    let map = self.groups.lock().await.clone();
+    let mut estimate_list: Vec<(f64,String)> =Vec::new();
+    for entry in map {
+        
+        let answ:Answer;
+        match entry.1.answer{
+            Some(a) => answ = a,
+            None => continue,
+        }
+        match &question {
+            Question::Normal { question, answers, solution } => {
+                match answ{
+                    Answer::Normal(ans) => {
+                        if *solution == ans {
+                            self.set_group_points(entry.0,NORMAL_POINTS , false).await;
+                        }
+                    },
+                    _ => continue,
+                }
+            },
+            Question::Estimate { question, solution } => {
+                match answ{
+                    Answer::Estimate(ans) => {
+                        estimate_list.push(((solution-ans).abs(),entry.0));
+                    },
+                    _ => continue,
+                }
+            },
+            Question::Sort { question, answers, solution } => {
+                match answ{
+                    Answer::Sort(ans) => {
+                        if *solution == ans{
+                            self.set_group_points(entry.0,SORT_POINTS , false).await;
+                        }
+                    },
+                    _ => continue,
+                }
+            },
+        }
+
+    }
+    if estimate_list.is_empty() == false {
+        estimate_list.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        let est_g_1 = estimate_list[0].1.clone();
+        self.set_group_points(est_g_1,ESTIMATE_1_POINTS , false).await;
+        let est_2_points:isize;
+        if estimate_list[0].0 == estimate_list[1].0 {
+            est_2_points = ESTIMATE_1_POINTS;
+        }
+        else {
+            est_2_points = ESTIMATE_2_POINTS;
+        }
+        let est_g_2 = estimate_list[1].1.clone();
+        self.set_group_points(est_g_2,est_2_points , false).await;
+        let len_v = estimate_list.len();
+        if len_v > 2 {
+            let mut i:usize = 2;
+            while estimate_list[i].0 == estimate_list[i-1].0 {
+                let est_g = estimate_list[i].1.clone();
+                self.set_group_points(est_g,est_2_points , false).await;
+                i = i+1;
+                if len_v <= i {
+                    break;
+                }
+            }
+        }
+    }
+
     }
 }
 

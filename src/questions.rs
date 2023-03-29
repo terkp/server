@@ -45,3 +45,8 @@ pub fn next_question(server_data: &State<ServerData>) -> Redirect {
     server_data.current_question.fetch_add(1, Ordering::Relaxed);
     Redirect::to(uri!("/questions", current_question()))
 }
+#[get("/results")]
+pub async fn results(server_data: &State<ServerData>) -> Status {
+    server_data.results().await;
+    Status::Ok
+}
