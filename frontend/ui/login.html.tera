@@ -1,0 +1,9 @@
+{% extends "ui/index" %}
+{% block question_content%}
+<script type = "text/javascript" src="ui/login.js"></script>
+
+<label for="group_name_input">Gruppenname: </label>
+<input id="group_name_input" type="text" name="group_name">
+<button id="buttonSend" onclick="sendGroupName()">Senden</button>
+
+{% endblock question_content%}

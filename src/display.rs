@@ -1,10 +1,8 @@
 use std::sync::atomic::Ordering;
 
-use crate::server_data::{EventBuffer, Question, ServerData};
-use rand::Rng;
+use crate::server_data::{Question, ServerData};
+use log::debug;
 use rocket::{
-    http::Status,
-    response::stream::{Event, EventStream},
     State,
 };
 use rocket_dyn_templates::{context, Template};
@@ -14,13 +12,15 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
     let questions = &server_data.questions.lock().await;
     if questions.is_empty() {
         return Template::render(
-            "display/normal",
+            "display/estimate",
             context! { question: "Keine Frage Gefunden", solution: 0.0 },
         );
     }
     let question = &questions[server_data.current_question.load(Ordering::Relaxed)];
 
-    println!("{}", serde_json::to_string(&question).unwrap());
+    let letters = ['A', 'B', 'C', 'D'];
+
+    debug!("{}", serde_json::to_string(&question).unwrap());
 
     match question {
         Question::Normal {
@@ -33,13 +33,14 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
                 question,
                 answers,
                 solution,
+                letters
             },
         ),
         Question::Estimate { question, solution } => Template::render(
             "display/estimate",
             context! {
                 question,
-                solution
+                solution,
             },
         ),
         Question::Sort {
@@ -52,42 +53,9 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
                 question,
                 answers,
                 solution,
+                letters
             },
         ),
     }
 }
 
-#[get("/events")]
-pub async fn events(server_data: &State<ServerData>) -> EventStream![Event + '_] {
-    let _display_buffer = &server_data.display_buffer;
-
-    let _buffers = &mut server_data.client_event_buffers.lock().await;
-
-    let ran_num: u32 = rand::thread_rng().gen();
-    let key = ran_num.to_string(); // Hier random string bauen
-    server_data
-        .client_event_buffers
-        .lock()
-        .await
-        .insert(key.clone(), EventBuffer::new());
-    // neuer random string
-
-    // EVENT!
-    // Schreibe in jeden event buffer
-
-    // 0 1 2 3 4 5
-    // a b c d e f
-
-    EventStream! {
-        loop {
-            yield server_data.client_event_buffers.lock().await[&key].pop().await;
-        }
-    }
-}
-
-#[get("/send_event/<text>")]
-pub async fn send_event(server_data: &State<ServerData>, text: String) -> Status {
-    let display_buffer = &server_data.display_buffer;
-    display_buffer.push(Event::data(text)).unwrap();
-    Status::Ok
-}

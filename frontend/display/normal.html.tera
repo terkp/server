@@ -3,4 +3,14 @@
 <h1>Frage</h1>
 
 <h2>{{ question }}</h2>
+
+A: {{ answers[0] }}<br>
+B: {{ answers[1] }}<br>
+C: {{ answers[2] }}<br>
+D: {{ answers[3] }}<br>
+
+<div id="solution" style="display: none;">
+Lösung: {{ letters[solution] }}: {{ answers[solution] }}
+</div>
+
 {% endblock question_content%}

@@ -1,21 +1,27 @@
 #![allow(clippy::result_large_err)]
 
+use chashmap::CHashMap;
 use crossbeam::queue::ArrayQueue;
+use log::warn;
 use rocket::{
     response::stream::Event,
     tokio::sync::{Mutex, Semaphore},
+    State,
 };
-use serde::Serialize;
-use std::sync::atomic::Ordering;
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::{collections::HashMap, str::FromStr, sync::atomic::AtomicUsize};
+use std::{collections::HashSet, fmt::Display, sync::atomic::Ordering};
 
 const NORMAL_POINTS: isize = 1;
 const SORT_POINTS: isize = 1;
 const ESTIMATE_1_POINTS: isize = 2;
 const ESTIMATE_2_POINTS: isize = 1;
 
+pub const EVENT_BUFFER_KEY_LENGTH: usize = 32;
+
 const NORMAL_NAME: &str = "normal";
+
 const ESTIMATE_NAME: &str = "schaetzen";
 const SORT_NAME: &str = "sortier";
 
@@ -26,10 +32,10 @@ pub struct ServerData {
     pub groups: Mutex<HashMap<String, GroupData>>,
     pub questions: Mutex<Vec<Question>>,
     pub current_question: AtomicUsize,
-    pub display_buffer: EventBuffer,
-    pub client_event_buffers: Mutex<HashMap<String, EventBuffer>>, // nächste frage event -> event_buffer
-                                                                   // ui <- nächste frage event
-                                                                   // display <- ????
+    pub clients: Mutex<HashSet<String>>,
+    pub client_event_buffers: CHashMap<String, EventBuffer>, // nächste frage event -> event_buffer
+                                                             // ui <- nächste frage event
+                                                             // display <- ????
 }
 
 impl ServerData {
@@ -38,10 +44,6 @@ impl ServerData {
             .lock()
             .await
             .insert(name.to_owned(), GroupData::default());
-    }
-
-    pub fn register_display_event(&self, event: Event) -> Result<(), Event> {
-        self.display_buffer.push(event)
     }
 
     pub async fn set_group_points(&self, name: String, number: isize, set: bool) {
@@ -65,11 +67,23 @@ impl ServerData {
             .entry(name)
             .and_modify(|e| *e = new_group_data);
     }
+
     pub async fn set_group_answer(&self, name: impl AsRef<str>, answer: Answer) {
+        let name = name.as_ref();
         let mut map = self.groups.lock().await;
-        let group_data = &mut map.get_mut(name.as_ref()).expect("group not found");
+        let Some(group_data) = &mut map.get_mut(name) else {
+            warn!("group \"{name}\" not found");
+            return;
+        };
         group_data.answer = Some(answer);
     }
+
+    pub async fn delete_group_answer(&self) {
+        self.groups.lock().await.values_mut().for_each(|group| {
+            group.answer = None;
+        })
+    }
+
     pub async fn results(&self) {
         if self.current_question.load(Ordering::Relaxed) >= self.questions.lock().await.len() {
             panic!("Error by loading question");
@@ -185,7 +199,7 @@ pub struct GroupData {
     pub answer: Option<Answer>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub enum Question {
     Normal {
         question: String,
@@ -384,5 +398,54 @@ impl Answer {
             SORT_NAME => convert_letters_to_numbers(answer_string).map(Answer::Sort),
             _ => Err(format!("invalid answer type: \"{s}\"")),
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UpdateEvent {
+    UpdateQuestions,
+    UpdateGroups,
+    ShowAnswers,
+    ShowSolution,
+    ShowPoints,
+}
+
+impl Display for UpdateEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use UpdateEvent::*;
+        write!(
+            f,
+            "{}",
+            match *self {
+                UpdateQuestions => "question",
+                UpdateGroups => "groups",
+                ShowAnswers => "show_answers",
+                ShowSolution => "show_solution",
+                ShowPoints => "show_points",
+            }
+        )
+    }
+}
+
+pub async fn send_event(server_data: &State<ServerData>, event: UpdateEvent) {
+    info!("sending event with text: {event}");
+
+    // The buffers we want to delete since they don't seem to be connected anymore
+    let mut to_delete = vec![];
+    // Write the event into every event buffer available
+    for id in server_data.clients.lock().await.iter() {
+        let Some(buffer) = server_data.client_event_buffers.get(id) else {
+            warn!("buffer corresponding to id {id} not found");
+            continue;
+        };
+        if buffer.push(Event::data(event.to_string())).is_err() {
+            warn!("event dropped for buffer {id}! the queue is full. assuming the client is not connected and deleting the buffer");
+            to_delete.push(id.clone());
+        }
+    }
+    let mut clients = server_data.clients.lock().await;
+    for name in to_delete {
+        server_data.client_event_buffers.remove(&name);
+        clients.remove(&name);
     }
 }

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::server_data::{send_event, UpdateEvent};
 use crate::server_data::{Answer, GroupData, ServerData};
 use rocket::{serde::json::Json, State};
 use serde::Deserialize;
@@ -8,7 +9,9 @@ use serde::Serialize;
 #[post("/new", format = "text/plain", data = "<group>")]
 pub async fn new_group(server_data: &State<ServerData>, group: String) -> String {
     server_data.insert_group(&group).await;
-    println!("{:?}", server_data.groups);
+    debug!("{:?}", server_data.groups);
+    //send group to anzeige and admin
+    send_event(server_data, UpdateEvent::UpdateGroups).await;
     format!("Group \"{group}\" created")
 }
 
@@ -61,7 +64,7 @@ pub async fn set_answer(
     let group_name = answer_data.group_name.clone();
     let answer = answer_data.0.try_into()?;
     server_data.set_group_answer(&group_name, answer).await;
-
+    send_event(server_data, UpdateEvent::UpdateGroups).await;
     Ok(format!("Updated group \"{group_name}\"'s answer"))
 }
 

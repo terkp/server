@@ -1,5 +1,6 @@
-{% extends "display/index" %}
+{% extends "ui/index" %}
 {% block question_content%}
+<script type = "text/javascript" src="ui/sort.js"></script>
 <h1>Sortierfrage</h1>
 
 <h2>{{ question }}</h2>

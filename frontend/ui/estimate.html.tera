@@ -1,5 +1,6 @@
-{% extends "display/index" %}
+{% extends "ui/index" %}
 {% block question_content%}
+<script type = "text/javascript" src="ui/estimate.js"></script>
 <h1>Schätzfrage</h1>
 
 <h2>{{ question }}</h2>
@@ -7,6 +8,5 @@
 <div id="solution" style="display: none;">
 Lösung: {{ solution }}
 </div>
-
 
 {% endblock question_content%}

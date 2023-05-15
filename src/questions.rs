@@ -1,4 +1,4 @@
-use crate::server_data::{Question, ServerData};
+use crate::server_data::{Question, ServerData, send_event, UpdateEvent};
 use rocket::{http::Status, response::Redirect, serde::json::Json, State};
 use std::sync::atomic::Ordering;
 
@@ -20,7 +20,7 @@ pub async fn load_questions(server_data: &State<ServerData>, questions: String) 
     *server_data.questions.lock().await = question_vec;
     server_data.current_question.store(0, Ordering::Relaxed);
     println!("{:?}", server_data.questions);
-
+    send_event(server_data, UpdateEvent::UpdateQuestions).await;
     Status::Ok
 }
 
@@ -41,12 +41,33 @@ pub async fn current_question(
 }
 
 #[get("/next")]
-pub fn next_question(server_data: &State<ServerData>) -> Redirect {
+pub async fn next_question(server_data: &State<ServerData>) -> Redirect {
     server_data.current_question.fetch_add(1, Ordering::Relaxed);
+    server_data.delete_group_answer().await;
+    send_event(server_data, UpdateEvent::UpdateQuestions).await;
     Redirect::to(uri!("/questions", current_question()))
 }
+
 #[get("/results")]
 pub async fn results(server_data: &State<ServerData>) -> Status {
+    send_event(server_data, UpdateEvent::ShowSolution).await;
     server_data.results().await;
+    Status::Ok
+}
+#[get("/show_solution")]
+pub async fn show_solution(server_data: &State<ServerData>) -> Status {
+    send_event(server_data, UpdateEvent::ShowSolution).await;
+    Status::Ok
+}
+
+#[get("/show_answers")]
+pub async fn show_answers(server_data: &State<ServerData>) -> Status {
+    send_event(server_data, UpdateEvent::ShowAnswers).await;
+    Status::Ok
+}
+
+#[get("/show_points")]
+pub async fn show_points(server_data: &State<ServerData>) -> Status {
+    send_event(server_data, UpdateEvent::ShowPoints).await;
     Status::Ok
 }

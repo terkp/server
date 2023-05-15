@@ -8,8 +8,9 @@
 </head>
 <body>
     <div id="hallo"></div>
+    <div id="current_group"></div> <a href="/login">Gruppe Ändern</a>
 
     {% block question_content %}{% endblock question_content %}
-    <script type = "text/javascript" src="display/index.js"></script>
+    <script type = "text/javascript" src="ui/index.js"></script>
 </body>
 </html>
