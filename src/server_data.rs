@@ -6,14 +6,20 @@ use rocket::{
     tokio::sync::{Mutex, Semaphore},
 };
 use serde::Serialize;
-use std::collections::hash_map::Entry;
 use std::sync::atomic::Ordering;
+use std::collections::hash_map::Entry;
 use std::{collections::HashMap, str::FromStr, sync::atomic::AtomicUsize};
 
-static NORMAL_POINTS: isize = 1;
-static SORT_POINTS: isize = 1;
-static ESTIMATE_1_POINTS: isize = 2;
-static ESTIMATE_2_POINTS: isize = 1;
+const NORMAL_POINTS: isize = 1;
+const SORT_POINTS: isize = 1;
+const ESTIMATE_1_POINTS: isize = 2;
+const ESTIMATE_2_POINTS: isize = 1;
+
+const NORMAL_NAME: &str = "normal";
+const ESTIMATE_NAME: &str = "schaetzen";
+const SORT_NAME: &str = "sortier";
+
+const QUESTION_TYPES: [&str; 3] = [NORMAL_NAME, ESTIMATE_NAME, SORT_NAME];
 
 #[derive(Default, Debug)]
 pub struct ServerData {
@@ -59,9 +65,9 @@ impl ServerData {
             .entry(name)
             .and_modify(|e| *e = new_group_data);
     }
-    pub async fn set_group_answer(&self, name: String, answer: Answer) {
+    pub async fn set_group_answer(&self, name: impl AsRef<str>, answer: Answer) {
         let mut map = self.groups.lock().await;
-        let group_data = &mut map.get_mut(&name).expect("group not found");
+        let group_data = &mut map.get_mut(name.as_ref()).expect("group not found");
         group_data.answer = Some(answer);
     }
     pub async fn results(&self) {
@@ -248,7 +254,7 @@ impl FromStr for Question {
         let mut split = s.split('#');
 
         let question_type = match split.next() {
-            Some(val) if val == "normal" || val == "sortier" || val == "schaetzen" => val,
+            Some(val) if QUESTION_TYPES.contains(&val) => val,
             None | Some(_) => return Err("No question type found"),
         };
 
@@ -258,7 +264,7 @@ impl FromStr for Question {
         };
 
         match question_type {
-            "normal" => {
+            NORMAL_NAME => {
                 let mut answers: [String; 4] = Default::default();
                 for answer in answers.iter_mut() {
                     *answer = match split.next() {
@@ -285,7 +291,7 @@ impl FromStr for Question {
                 Ok(Question::normal(question, &answers, solution))
             }
 
-            "schaetzen" => {
+            ESTIMATE_NAME => {
                 let solution = {
                     let so = match split.next() {
                         Some(val) => val,
@@ -300,7 +306,7 @@ impl FromStr for Question {
 
                 Ok(Question::estimate(question, solution))
             }
-            "sortier" => {
+            SORT_NAME => {
                 let mut answers: [String; 4] = Default::default();
                 for answer in answers.iter_mut() {
                     *answer = match split.next() {
@@ -336,4 +342,47 @@ pub enum Answer {
     Normal(usize),
     Estimate(f64),
     Sort([usize; 4]),
+}
+
+impl Answer {
+    pub fn try_parse_answer(
+        answer_type: impl AsRef<str>,
+        answer_string: impl AsRef<str>,
+    ) -> Result<Answer, String> {
+        let s = answer_type.as_ref();
+        let answer_string = answer_string.as_ref();
+
+        fn convert_letters_to_numbers(letters: &str) -> Result<[usize; 4], String> {
+            if letters.len() != 4 {
+                return Err(format!(
+                    "could not convert \"{letters}\" into a sorting answer"
+                ));
+            }
+            let mut numbers = [0; 4];
+
+            for (i, letter) in letters.chars().enumerate() {
+                match letter {
+                    'a' => numbers[i] = 0,
+                    'b' => numbers[i] = 1,
+                    'c' => numbers[i] = 2,
+                    'd' => numbers[i] = 3,
+                    _ => return Err(format!("invalid letter: {letter}")),
+                }
+            }
+
+            Ok(numbers)
+        }
+        match s {
+            NORMAL_NAME => answer_string
+                .parse()
+                .map_err(|_| format!("could not parse answer \"{s}\" as a number"))
+                .map(Answer::Normal),
+            ESTIMATE_NAME => answer_string
+                .parse()
+                .map_err(|_| format!("could not parse answer \"{s}\" as a number"))
+                .map(Answer::Estimate),
+            SORT_NAME => convert_letters_to_numbers(answer_string).map(Answer::Sort),
+            _ => Err(format!("invalid answer type: \"{s}\"")),
+        }
+    }
 }
