@@ -1,25 +1,26 @@
 use std::sync::atomic::Ordering;
 
-use rocket::tokio::time::{self, Duration};
+use crate::server_data::{EventBuffer, Question, ServerData};
+use rand::Rng;
 use rocket::{
     http::Status,
     response::stream::{Event, EventStream},
     State,
 };
 use rocket_dyn_templates::{context, Template};
-use rand::Rng;
-use crate::server_data::{Question, ServerData, EventBuffer};
 
 #[get("/")]
 pub async fn show_display(server_data: &State<ServerData>) -> Template {
     let questions = &server_data.questions.lock().await;
     if questions.is_empty() {
-        return Template::render("display/normal", context! { question: "Keine Frage Gefunden", solution: 0.0 });
+        return Template::render(
+            "display/normal",
+            context! { question: "Keine Frage Gefunden", solution: 0.0 },
+        );
     }
     let question = &questions[server_data.current_question.load(Ordering::Relaxed)];
 
     println!("{}", serde_json::to_string(&question).unwrap());
-
 
     match question {
         Question::Normal {
@@ -58,13 +59,17 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
 
 #[get("/events")]
 pub async fn events(server_data: &State<ServerData>) -> EventStream![Event + '_] {
-    let display_buffer = &server_data.display_buffer;
+    let _display_buffer = &server_data.display_buffer;
 
-    let buffers = &mut server_data.client_event_buffers.lock().await;
+    let _buffers = &mut server_data.client_event_buffers.lock().await;
 
-    let ran_num: u8 = rand::thread_rng().gen();
-    let key = ran_num.to_string();/// Hier random string bauen
-    server_data.client_event_buffers.lock().await.insert(key.clone(), EventBuffer::new());
+    let ran_num: u32 = rand::thread_rng().gen();
+    let key = ran_num.to_string(); // Hier random string bauen
+    server_data
+        .client_event_buffers
+        .lock()
+        .await
+        .insert(key.clone(), EventBuffer::new());
     // neuer random string
 
     // EVENT!

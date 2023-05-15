@@ -1,10 +1,9 @@
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 use crate::server_data::{Answer, GroupData, ServerData};
-use rocket::{http::Status, serde::json::Json, State};
+use rocket::{serde::json::Json, State};
 use serde_json::json;
-use serde_json::{Error, Value};
+use serde_json::Value;
 #[post("/new", format = "application/json", data = "<group>")]
 pub async fn new_group(server_data: &State<ServerData>, group: String) -> String {
     server_data.insert_group(&group).await;
@@ -30,9 +29,9 @@ pub async fn set_points(
         return Err("Error by reading!".to_string());
     };
     let name_temp = v["name"].as_str();
-    let name = name_temp.as_deref().unwrap();
+    let name = name_temp.unwrap();
     let number_temp = v["number"].as_str();
-    let number = number_temp.as_deref().unwrap();
+    let number = number_temp.unwrap();
     let set_number_unchecked = number.parse::<i32>();
 
     let set_number = match set_number_unchecked {
@@ -60,29 +59,29 @@ pub async fn set_answer(
         return Err("Error by reading!".to_string());
     };
     let answer_type_temp = v["type"].as_str();
-    let answer_type = answer_type_temp.as_deref().unwrap();
+    let answer_type = answer_type_temp.unwrap();
     let answer: Option<Answer>;
     if answer_type == "normal" {
         let answer_0_temp = v["answer_0"].as_str();
-        let answer_0 = answer_0_temp.as_deref().unwrap();
+        let answer_0 = answer_0_temp.unwrap();
         answer = Some(Answer::Normal(answer_to_number(answer_0)));
     } else if answer_type == "schaetzen" {
         let answer_0_temp = v["answer_0"].as_str();
-        let answer_0 = answer_0_temp.as_deref().unwrap();
+        let answer_0 = answer_0_temp.unwrap();
         match answer_0.parse::<f64>() {
             Ok(n) => answer = Some(Answer::Estimate(n)),
-            Err(e) => return Err("Error by reading answer!".to_string()),
+            Err(_e) => return Err("Error by reading answer!".to_string()),
         }
     } else if answer_type == "sortier" {
         let answer_0_temp = v["answer_0"].as_str();
-        let answer_0 = answer_0_temp.as_deref().unwrap();
+        let answer_0 = answer_0_temp.unwrap();
         answer = Some(Answer::Sort(convert_letters_to_numbers(answer_0)));
     } else {
         answer = None;
     }
 
     let name_temp = v["name"].as_str();
-    let name = name_temp.as_deref().unwrap();
+    let name = name_temp.unwrap();
     let name_s = String::from(name);
     match answer {
         Some(v) => server_data.set_group_answer(name_s, v).await,

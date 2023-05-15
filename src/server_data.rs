@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 use crossbeam::queue::ArrayQueue;
 use rocket::{
     response::stream::Event,
@@ -6,11 +8,7 @@ use rocket::{
 use serde::Serialize;
 use std::collections::hash_map::Entry;
 use std::sync::atomic::Ordering;
-use std::{
-    collections::{HashMap, VecDeque},
-    str::FromStr,
-    sync::atomic::AtomicUsize,
-};
+use std::{collections::HashMap, str::FromStr, sync::atomic::AtomicUsize};
 
 static NORMAL_POINTS: isize = 1;
 static SORT_POINTS: isize = 1;
@@ -23,10 +21,9 @@ pub struct ServerData {
     pub questions: Mutex<Vec<Question>>,
     pub current_question: AtomicUsize,
     pub display_buffer: EventBuffer,
-    pub client_event_buffers: Mutex<HashMap<String, EventBuffer>>
-    // nächste frage event -> event_buffer
-    // ui <- nächste frage event
-    // display <- ????
+    pub client_event_buffers: Mutex<HashMap<String, EventBuffer>>, // nächste frage event -> event_buffer
+                                                                   // ui <- nächste frage event
+                                                                   // display <- ????
 }
 
 impl ServerData {
@@ -40,43 +37,32 @@ impl ServerData {
     pub fn register_display_event(&self, event: Event) -> Result<(), Event> {
         self.display_buffer.push(event)
     }
+
     pub async fn set_group_points(&self, name: String, number: isize, set: bool) {
-        let name_s = name.clone();
         let mut map = self.groups.lock().await.clone();
-        let matches = match map.entry(name_s) {
+        let matches = match map.entry(name.clone()) {
             Entry::Occupied(o) => o,
             _ => panic!("Group not found"),
         };
-        let G_data: &GroupData = matches.get();
-        let mut new_GroupData = G_data.clone();
-        let score: isize;
-        if set == false {
-            score = new_GroupData.score + number;
+        let g_data: &GroupData = matches.get();
+        let mut new_group_data = g_data.clone();
+        let score = if !set {
+            new_group_data.score + number
         } else {
-            score = number;
-        }
-        new_GroupData.score = score;
+            number
+        };
+
+        new_group_data.score = score;
         self.groups
             .lock()
             .await
             .entry(name)
-            .and_modify(|e| *e = new_GroupData);
+            .and_modify(|e| *e = new_group_data);
     }
     pub async fn set_group_answer(&self, name: String, answer: Answer) {
-        let name_s = name.clone();
-        let mut map = self.groups.lock().await.clone();
-        let matches = match map.entry(name_s) {
-            Entry::Occupied(o) => o,
-            _ => panic!("Group not found"),
-        };
-        let G_data: &GroupData = matches.get();
-        let mut new_GroupData = G_data.clone();
-        new_GroupData.answer = Some(answer);
-        self.groups
-            .lock()
-            .await
-            .entry(name)
-            .and_modify(|e| *e = new_GroupData);
+        let mut map = self.groups.lock().await;
+        let group_data = &mut map.get_mut(&name).expect("group not found");
+        group_data.answer = Some(answer);
     }
     pub async fn results(&self) {
         if self.current_question.load(Ordering::Relaxed) >= self.questions.lock().await.len() {
@@ -88,15 +74,14 @@ impl ServerData {
         let map = self.groups.lock().await.clone();
         let mut estimate_list: Vec<(f64, String)> = Vec::new();
         for entry in map {
-            let answ: Answer;
-            match entry.1.answer {
-                Some(a) => answ = a,
+            let answ: Answer = match entry.1.answer {
+                Some(a) => a,
                 None => continue,
-            }
+            };
             match &question {
                 Question::Normal {
-                    question,
-                    answers,
+                    question: _,
+                    answers: _,
                     solution,
                 } => match answ {
                     Answer::Normal(ans) => {
@@ -106,15 +91,18 @@ impl ServerData {
                     }
                     _ => continue,
                 },
-                Question::Estimate { question, solution } => match answ {
+                Question::Estimate {
+                    question: _,
+                    solution,
+                } => match answ {
                     Answer::Estimate(ans) => {
                         estimate_list.push(((solution - ans).abs(), entry.0));
                     }
                     _ => continue,
                 },
                 Question::Sort {
-                    question,
-                    answers,
+                    question: _,
+                    answers: _,
                     solution,
                 } => match answ {
                     Answer::Sort(ans) => {
@@ -126,17 +114,16 @@ impl ServerData {
                 },
             }
         }
-        if estimate_list.is_empty() == false {
+        if !estimate_list.is_empty() {
             estimate_list.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
             let est_g_1 = estimate_list[0].1.clone();
             self.set_group_points(est_g_1, ESTIMATE_1_POINTS, false)
                 .await;
-            let est_2_points: isize;
-            if estimate_list[0].0 == estimate_list[1].0 {
-                est_2_points = ESTIMATE_1_POINTS;
+            let est_2_points = if estimate_list[0].0 == estimate_list[1].0 {
+                ESTIMATE_1_POINTS
             } else {
-                est_2_points = ESTIMATE_2_POINTS;
-            }
+                ESTIMATE_2_POINTS
+            };
             let est_g_2 = estimate_list[1].1.clone();
             self.set_group_points(est_g_2, est_2_points, false).await;
             let len_v = estimate_list.len();
@@ -145,7 +132,7 @@ impl ServerData {
                 while estimate_list[i].0 == estimate_list[i - 1].0 {
                     let est_g = estimate_list[i].1.clone();
                     self.set_group_points(est_g, est_2_points, false).await;
-                    i = i + 1;
+                    i += 1;
                     if len_v <= i {
                         break;
                     }
@@ -163,7 +150,7 @@ impl EventBuffer {
         Default::default()
     }
 
-    pub fn with_capacity(cap: usize) -> Self {
+    pub fn with_capacity(_cap: usize) -> Self {
         Self(ArrayQueue::new(16), Semaphore::new(0))
     }
 
@@ -258,7 +245,7 @@ impl FromStr for Question {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut split = s.split("#");
+        let mut split = s.split('#');
 
         let question_type = match split.next() {
             Some(val) if val == "normal" || val == "sortier" || val == "schaetzen" => val,
@@ -273,8 +260,8 @@ impl FromStr for Question {
         match question_type {
             "normal" => {
                 let mut answers: [String; 4] = Default::default();
-                for i in 0..4 {
-                    answers[i] = match split.next() {
+                for answer in answers.iter_mut() {
+                    *answer = match split.next() {
                         Some(val) => val.to_owned(),
                         None => return Err("Answer not found"),
                     }
@@ -315,20 +302,20 @@ impl FromStr for Question {
             }
             "sortier" => {
                 let mut answers: [String; 4] = Default::default();
-                for i in 0..4 {
-                    answers[i] = match split.next() {
+                for answer in answers.iter_mut() {
+                    *answer = match split.next() {
                         Some(val) => val.to_owned(),
                         None => return Err("Answer not found"),
                     }
                 }
                 let mut solutions = [0usize; 4];
-                for i in 0..4 {
+                for solution in solutions.iter_mut() {
                     let so = match split.next() {
                         Some(val) => val,
                         None => return Err("Answer not found"),
                     };
 
-                    solutions[i] = match so {
+                    *solution = match so {
                         "a" => 0,
                         "b" => 1,
                         "c" => 2,

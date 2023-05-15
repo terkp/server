@@ -6,11 +6,11 @@ use rocket_dyn_templates::Template;
 #[macro_use]
 extern crate rocket;
 
+mod client;
 mod display;
 mod group;
 mod questions;
 mod server_data;
-mod client;
 
 #[get("/<file..>")]
 async fn files(file: PathBuf) -> Option<NamedFile> {
