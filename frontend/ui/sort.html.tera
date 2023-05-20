@@ -5,10 +5,18 @@
 
 <h2>{{ question }}</h2>
 
-A: {{ answers[0] }}<br>
-B: {{ answers[1] }}<br>
-C: {{ answers[2] }}<br>
-D: {{ answers[3] }}<br>
+
+<div id="answer" style="display: none;">
+Deine Antwort: <span id="answer_content"></span>
+</div>
+
+<button id="buttonA" onclick="addAnswer(0)">A: {{ answers[0] }}</button><br>
+<button id="buttonB" onclick="addAnswer(1)">B: {{ answers[1] }}</button><br>
+<button id="buttonC" onclick="addAnswer(2)">C: {{ answers[2] }}</button><br>
+<button id="buttonD" onclick="addAnswer(3)">D: {{ answers[3] }}</button><br>
+<br>
+<button id="buttonClear" onclick="clearAnswer()">Antwort Löschen</button><br>
+<button id="buttonSend" onclick="sendAnswer()">Antwort Senden</button><br>
 
 <div id="solution" style="display: none;">
 Lösung: 

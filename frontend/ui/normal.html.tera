@@ -6,7 +6,10 @@
 <h2>{{ question }}</h2>
 
 <div id="answer" style="display: none;">
-    Deine Antwort: <span id="answer_content"></span>
+Deine Antwort: <span id="answer_content"></span>
+</div>
+<div id="solution" style="display: none;">
+Lösung: {{ letters[solution] }}: {{ answers[solution] }}
 </div>
 
 <button id="buttonA" onclick="setAnswer(0)">A: {{ answers[0] }}</button><br>
@@ -14,10 +17,7 @@
 <button id="buttonC" onclick="setAnswer(2)">C: {{ answers[2] }}</button><br>
 <button id="buttonD" onclick="setAnswer(3)">D: {{ answers[3] }}</button><br>
 <br>
-<button id="buttonSend" onclick="sendAnswer()">D: {{ answers[3] }}</button><br>
+<button id="buttonSend" onclick="sendAnswer()" disabled>Antwort Senden</button><br>
 
-<div id="solution" style="display: none;">
-Lösung: {{ letters[solution] }}: {{ answers[solution] }}
-</div>
 
 {% endblock question_content%}

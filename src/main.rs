@@ -1,7 +1,7 @@
 use std::{path::{Path, PathBuf}, sync::atomic::Ordering};
 
 use rand::{distributions::Alphanumeric, Rng};
-use rocket::{fs::NamedFile, State, response::stream::{Event, EventStream}};
+use rocket::{fs::NamedFile, State, response::stream::{Event, EventStream}, Shutdown, tokio::select};
 use rocket_dyn_templates::{Template, context};
 use simplelog::{TermLogger, ConfigBuilder};
 
@@ -40,7 +40,7 @@ fn setup_logger() {
 }
 
 #[get("/events")]
-pub async fn events(server_data: &State<ServerData>) -> EventStream![Event + '_] {
+pub async fn events(server_data: &State<ServerData>, mut shutdown: Shutdown) -> EventStream![Event + '_] {
     let key = rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(EVENT_BUFFER_KEY_LENGTH)
@@ -49,19 +49,25 @@ pub async fn events(server_data: &State<ServerData>) -> EventStream![Event + '_]
     server_data.clients.lock().await.insert(key.clone());
     server_data
         .client_event_buffers
-        .insert(key.clone(), EventBuffer::new());
+        .insert(key.clone(), EventBuffer::with_capacity(4));
     debug!("Added event buffer with id \"{key}\"");
 
     EventStream! {
         loop {
-            yield server_data.client_event_buffers.get(&key).unwrap().pop().await;
+            let temp = server_data.client_event_buffers.get(&key).unwrap();
+            select! {
+                event = temp.pop() => { yield event; }
+                _ = &mut shutdown => {
+                    break;
+                }
+            }
         }
     }
 }
 
 #[launch]
 fn rocket() -> _ {
-    //setup_logger();
+    setup_logger();
     rocket::build()
         .manage(server_data::ServerData::default())
         .mount("/", routes![files, events, show_ui, show_login])

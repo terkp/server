@@ -46,7 +46,7 @@ pub struct AnswerData {
     group_name: String,
     #[serde(alias = "type")]
     answer_type: String,
-    #[serde(rename = "answer")]
+    #[serde(alias = "answer")]
     answer_string: String,
 }
 
@@ -64,7 +64,7 @@ pub async fn set_answer(
     answer_data: Json<AnswerData>,
 ) -> Result<String, String> {
     let group_name = answer_data.group_name.clone();
-    let answer = answer_data.0.try_into()?;
+    let answer = dbg!(answer_data.0.try_into()?);
     server_data.set_group_answer(&group_name, answer).await;
     send_event(server_data, UpdateEvent::UpdateGroups).await;
     Ok(format!("Updated group \"{group_name}\"'s answer"))

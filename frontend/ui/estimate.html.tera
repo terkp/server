@@ -9,4 +9,8 @@
 Lösung: {{ solution }}
 </div>
 
+<input type="number" id="answerInput" onchange="setAnswer()"/>
+<br>
+<button id="buttonSend" onclick="sendAnswer()" disabled>Antwort Senden</button><br>
+
 {% endblock question_content%}

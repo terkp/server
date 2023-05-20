@@ -21,7 +21,6 @@ const ESTIMATE_2_POINTS: isize = 1;
 pub const EVENT_BUFFER_KEY_LENGTH: usize = 32;
 
 const NORMAL_NAME: &str = "normal";
-
 const ESTIMATE_NAME: &str = "schaetzen";
 const SORT_NAME: &str = "sortier";
 
@@ -170,26 +169,29 @@ impl EventBuffer {
         Default::default()
     }
 
-    pub fn with_capacity(_cap: usize) -> Self {
-        Self(ArrayQueue::new(16), Semaphore::new(0))
+    pub fn with_capacity(cap: usize) -> Self {
+        log::info!("Created event queue with capacity {cap}");
+        Self(ArrayQueue::new(cap), Semaphore::new(0))
     }
 
     pub fn push(&self, event: Event) -> Result<(), Event> {
         let res = self.0.push(event);
         self.1.add_permits(1);
+        log::info!("Added event to queue. Now {} events stored", self.0.len());
         res
     }
 
     pub async fn pop(&self) -> Event {
         let permit = self.1.acquire().await.unwrap();
         permit.forget();
+        log::info!("Removed event from queue. Now {} events stored", self.0.len() - 1);
         self.0.pop().unwrap()
     }
 }
 
 impl Default for EventBuffer {
     fn default() -> Self {
-        Self(ArrayQueue::new(16), Semaphore::new(0))
+        Self::with_capacity(16)
     }
 }
 
@@ -374,7 +376,7 @@ impl Answer {
             }
             let mut numbers = [0; 4];
 
-            for (i, letter) in letters.chars().enumerate() {
+            for (i, letter) in letters.chars().map(|c| c.to_ascii_lowercase()).enumerate() {
                 match letter {
                     'a' => numbers[i] = 0,
                     'b' => numbers[i] = 1,
