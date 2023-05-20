@@ -405,11 +405,16 @@ impl Answer {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UpdateEvent {
+    /// Update the questions shown in the UI
     UpdateQuestions,
+    /// Update the groups shown in the UI
     UpdateGroups,
+    /// Show the answers the groups have given in the display
     ShowAnswers,
+    /// Shows the solution to the current question
     ShowSolution,
     ShowPoints,
+    ShowScore
 }
 
 impl Display for UpdateEvent {
@@ -424,6 +429,7 @@ impl Display for UpdateEvent {
                 ShowAnswers => "show_answers",
                 ShowSolution => "show_solution",
                 ShowPoints => "show_points",
+                ShowScore => "show_score"
             }
         )
     }

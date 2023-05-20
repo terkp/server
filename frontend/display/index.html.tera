@@ -10,6 +10,10 @@
     <div id="hallo"></div>
 
     {% block question_content %}{% endblock question_content %}
+    <div id="solution" style="display: none;">
+    Lösung: {{ solution }}
+    </div>
+    <div id="group_answers"></div>
     <script type = "text/javascript" src="display/index.js"></script>
 </body>
 </html>

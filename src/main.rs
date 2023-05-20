@@ -1,7 +1,7 @@
 use std::{path::{Path, PathBuf}, sync::atomic::Ordering};
 
 use rand::{distributions::Alphanumeric, Rng};
-use rocket::{fs::NamedFile, State, response::stream::{Event, EventStream}, Shutdown, tokio::select};
+use rocket::{fs::NamedFile, State, response::stream::{Event, EventStream}, Shutdown, tokio::select, http::{Header, Status}, Request, Response, fairing::{Kind, Info, Fairing}};
 use rocket_dyn_templates::{Template, context};
 use simplelog::{TermLogger, ConfigBuilder};
 
@@ -22,6 +22,34 @@ async fn files(file: PathBuf) -> Option<NamedFile> {
     NamedFile::open(Path::new("frontend/").join(file))
         .await
         .ok()
+}
+/// I am stupid and don't know how webdev works so this is here.
+#[options("/<_..>")]
+async fn cors_fix() -> Status {
+    Status::Ok
+}
+
+pub struct CORS;
+
+#[rocket::async_trait]
+impl Fairing for CORS {
+    fn info(&self) -> Info {
+        Info {
+            name: "Attaching CORS headers to responses",
+            kind: Kind::Response,
+        }
+    }
+
+    async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
+        response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
+        response.set_header(Header::new(
+            "Access-Control-Allow-Methods",
+            "POST, GET, PATCH, OPTIONS",
+        ));
+        response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
+        response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
+        debug!("Attached Cors Headers to response");
+    }
 }
 
 fn setup_logger() {
@@ -70,7 +98,7 @@ fn rocket() -> _ {
     setup_logger();
     rocket::build()
         .manage(server_data::ServerData::default())
-        .mount("/", routes![files, events, show_ui, show_login])
+        .mount("/", routes![files, events, show_ui, show_login, cors_fix])
         .mount(
             "/groups/",
             routes![
@@ -89,14 +117,16 @@ fn rocket() -> _ {
                 questions::results,
                 questions::show_answers,
                 questions::show_points,
-                questions::show_solution
+                questions::show_solution,
+                questions::show_score
             ],
         )
         .mount(
             "/display",
-            routes![display::show_display],
+            routes![display::show_display, display::show_score],
         )
         .attach(Template::fairing())
+        .attach(CORS)
 }
 
 #[get("/")]

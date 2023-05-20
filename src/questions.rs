@@ -71,3 +71,9 @@ pub async fn show_points(server_data: &State<ServerData>) -> Status {
     send_event(server_data, UpdateEvent::ShowPoints).await;
     Status::Ok
 }
+
+#[get("/show_score")]
+pub async fn show_score(server_data: &State<ServerData>) -> Status {
+    send_event(server_data, UpdateEvent::ShowScore).await;
+    Status::Ok
+}

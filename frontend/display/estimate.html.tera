@@ -4,9 +4,5 @@
 
 <h2>{{ question }}</h2>
 
-<div id="solution" style="display: none;">
-Lösung: {{ solution }}
-</div>
-
 
 {% endblock question_content%}
