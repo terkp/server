@@ -3,16 +3,18 @@ use std::collections::HashMap;
 use crate::server_data::{send_event, UpdateEvent};
 use crate::server_data::{Answer, GroupData, ServerData};
 use rocket::{serde::json::Json, State};
+use rocket::http::Status;
 use serde::Deserialize;
 use serde::Serialize;
 
 #[post("/new", format = "text/plain", data = "<group>")]
-pub async fn new_group(server_data: &State<ServerData>, group: String) -> String {
+pub async fn new_group(server_data: &State<ServerData>, group: String) -> Status {
     server_data.insert_group(&group).await;
     debug!("{:?}", server_data.groups);
     //send group to anzeige and admin
     send_event(server_data, UpdateEvent::UpdateGroups).await;
-    format!("Group \"{group}\" created")
+    //format!("Group \"{group}\" created")
+    Status::Ok
 }
 
 #[get("/get")]

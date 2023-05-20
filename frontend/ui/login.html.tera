@@ -4,6 +4,7 @@
 
 <label for="group_name_input">Gruppenname: </label>
 <input id="group_name_input" type="text" name="group_name">
-<button id="buttonSend" onclick="sendGroupName()">Senden</button>
+<button id="buttonSend" type="button" onclick="sendGroupName()">Senden</button>
+
 
 {% endblock question_content%}

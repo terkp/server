@@ -3,8 +3,9 @@
     "",
     "\\frontend",
     "\\frontend\\display",
+    "\\frontend\\ui",
     "\\src"
   ],
-  "SelectedNode": "\\src\\main.rs",
+  "SelectedNode": "\\src\\group.rs",
   "PreviewInSolutionExplorer": false
 }
