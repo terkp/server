@@ -10,7 +10,7 @@ use rocket::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
-use std::{collections::HashMap, str::FromStr, sync::atomic::AtomicUsize};
+use std::{collections::HashMap, str::FromStr, sync::atomic::AtomicUsize, sync::atomic::AtomicBool};
 use std::{collections::HashSet, fmt::Display, sync::atomic::Ordering};
 
 const NORMAL_POINTS: isize = 1;
@@ -31,6 +31,7 @@ pub struct ServerData {
     pub groups: Mutex<HashMap<String, GroupData>>,
     pub questions: Mutex<Vec<Question>>,
     pub current_question: AtomicUsize,
+    pub block_answer: AtomicBool,
     pub clients: Mutex<HashSet<String>>,
     pub client_event_buffers: CHashMap<String, EventBuffer>, // nächste frage event -> event_buffer
                                                              // ui <- nächste frage event
@@ -43,6 +44,15 @@ impl ServerData {
             .lock()
             .await
             .insert(name.to_owned(), GroupData::default());
+    }
+    pub async fn delete_group(&self, name: &str) {
+        let mut map = self.groups.lock().await;
+
+        if let Some(_) = map.remove(name) {
+            println!("Entry with name '{}' deleted.", name);
+        } else {
+            println!("Entry with name '{}' not found.", name);
+        }
     }
 
     pub async fn set_group_points(&self, name: String, number: isize, set: bool) {

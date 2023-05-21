@@ -19,6 +19,7 @@ pub async fn load_questions(server_data: &State<ServerData>, questions: String) 
 
     *server_data.questions.lock().await = question_vec;
     server_data.current_question.store(0, Ordering::Relaxed);
+    server_data.block_answer.store(false,Ordering::SeqCst);
     println!("{:?}", server_data.questions);
     send_event(server_data, UpdateEvent::UpdateQuestions).await;
     Status::Ok
@@ -43,9 +44,27 @@ pub async fn current_question(
 #[get("/next")]
 pub async fn next_question(server_data: &State<ServerData>) -> Redirect {
     server_data.current_question.fetch_add(1, Ordering::Relaxed);
+    server_data.block_answer.store(false,Ordering::SeqCst);
     server_data.delete_group_answer().await;
     send_event(server_data, UpdateEvent::UpdateQuestions).await;
     Redirect::to(uri!("/questions", current_question()))
+}
+#[post("/set", format = "text/plain", data = "<question_num>")]
+pub async fn set_question(server_data: &State<ServerData>, question_num: String) -> Status {
+    match question_num.parse::<usize>() {
+        Ok(value) => {
+            server_data.current_question.store(value, Ordering::Relaxed);
+            server_data.block_answer.store(false,Ordering::SeqCst);
+            server_data.delete_group_answer().await;
+            send_event(server_data, UpdateEvent::UpdateQuestions).await;
+            Status::Ok
+        }
+        Err(err) => {
+            println!("Failed to parse usize: {}", err);
+            Status::BadRequest
+        }
+    }
+
 }
 
 #[get("/results")]
@@ -63,6 +82,7 @@ pub async fn show_solution(server_data: &State<ServerData>) -> Status {
 #[get("/show_answers")]
 pub async fn show_answers(server_data: &State<ServerData>) -> Status {
     send_event(server_data, UpdateEvent::ShowAnswers).await;
+    server_data.block_answer.store(true,Ordering::SeqCst);
     Status::Ok
 }
 

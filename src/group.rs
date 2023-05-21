@@ -69,6 +69,15 @@ pub async fn set_answer(
     send_event(server_data, UpdateEvent::UpdateGroups).await;
     Ok(format!("Updated group \"{group_name}\"'s answer"))
 }
+#[post("/delete", format = "text/plain", data = "<group>")]
+pub async fn del_group(server_data: &State<ServerData>, group: String) -> Status {
+    server_data.delete_group(&group).await;
+    debug!("{:?}", server_data.groups);
+    //send group to anzeige and admin
+    send_event(server_data, UpdateEvent::UpdateGroups).await;
+    //format!("Group \"{group}\" created")
+    Status::Ok
+}
 
 //#[get("/get")]
 //pub fn get_group_data(server_data: &State<Mutex<ServerData>>) -> Json<(String, isize, Option<Answer>)> {

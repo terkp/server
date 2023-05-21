@@ -105,7 +105,8 @@ fn rocket() -> _ {
                 group::new_group,
                 group::get_all_groups,
                 group::set_points,
-                group::set_answer
+                group::set_answer,
+                group::del_group
             ],
         )
         .mount(
@@ -118,7 +119,8 @@ fn rocket() -> _ {
                 questions::show_answers,
                 questions::show_points,
                 questions::show_solution,
-                questions::show_score
+                questions::show_score,
+                questions::set_question
             ],
         )
         .mount(

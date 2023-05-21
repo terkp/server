@@ -2,10 +2,11 @@
   "ExpandedNodes": [
     "",
     "\\frontend",
+    "\\frontend\\admin",
     "\\frontend\\display",
     "\\frontend\\ui",
     "\\src"
   ],
-  "SelectedNode": "\\src\\group.rs",
+  "SelectedNode": "\\frontend\\ui\\estimate.html.tera",
   "PreviewInSolutionExplorer": false
 }
