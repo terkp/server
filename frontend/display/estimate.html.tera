@@ -1,8 +1,10 @@
-{% extends "display/index" %}
-{% block question_content%}
-<h1>Schätzfrage</h1>
+{% extends "display/index" %} {% block question_content%}
 
-<h2>{{ question }}</h2>
+<div class="container">
+  <h1>Schätzfrage</h1>
 
+  <h2>{{ question }}</h2>
+  <div id="solution" class="answer">Lösung: {{ solution }}</div>
+</div>
 
 {% endblock question_content%}

@@ -2,7 +2,7 @@
 
 use chashmap::CHashMap;
 use crossbeam::queue::ArrayQueue;
-use log::warn;
+use log::{info, warn};
 use rocket::{
     response::stream::Event,
     tokio::sync::{Mutex, Semaphore},
@@ -10,8 +10,11 @@ use rocket::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
-use std::{collections::HashMap, str::FromStr, sync::atomic::AtomicUsize, sync::atomic::AtomicBool};
+use std::{
+    collections::HashMap, str::FromStr, sync::atomic::AtomicBool, sync::atomic::AtomicUsize,
+};
 use std::{collections::HashSet, fmt::Display, sync::atomic::Ordering};
+use thiserror::Error;
 
 const NORMAL_POINTS: isize = 1;
 const SORT_POINTS: isize = 1;
@@ -38,28 +41,46 @@ pub struct ServerData {
                                                              // display <- ????
 }
 
-impl ServerData {
-    pub async fn insert_group(&self, name: &str) {
-        self.groups
-            .lock()
-            .await
-            .insert(name.to_owned(), GroupData::default());
-    }
-    pub async fn delete_group(&self, name: &str) {
-        let mut map = self.groups.lock().await;
+#[derive(Error, Debug, PartialEq, Clone, Hash)]
+pub enum GroupError {
+    #[error("group '{0}' not found")]
+    NotFound(String),
+    #[error("group with name '{0}' already exists")]
+    Duplicate(String),
+}
 
-        if let Some(_) = map.remove(name) {
-            println!("Entry with name '{}' deleted.", name);
-        } else {
-            println!("Entry with name '{}' not found.", name);
+impl ServerData {
+    pub async fn insert_group(&self, name: &str) -> Result<(), GroupError> {
+        match self.groups.lock().await.entry(name.to_owned()) {
+            Entry::Vacant(v) => {
+                v.insert(GroupData::default());
+                Ok(())
+            }
+            Entry::Occupied(_) => Err(GroupError::Duplicate(name.to_owned())),
         }
     }
 
-    pub async fn set_group_points(&self, name: String, number: isize, set: bool) {
+    pub async fn delete_group(&self, name: &str) {
+        let mut map = self.groups.lock().await;
+
+        if map.remove(name).is_some() {
+            info!("group with name '{}' deleted.", name);
+        } else {
+            info!("group with name '{}' not found.", name);
+        }
+    }
+
+    pub async fn set_group_points(
+        &self,
+        name: impl AsRef<str>,
+        number: isize,
+        set: bool,
+    ) -> Result<(), GroupError> {
+        let name = name.as_ref().to_owned();
         let mut map = self.groups.lock().await.clone();
         let matches = match map.entry(name.clone()) {
             Entry::Occupied(o) => o,
-            _ => panic!("Group not found"),
+            _ => return Err(GroupError::NotFound(name)),
         };
         let g_data: &GroupData = matches.get();
         let mut new_group_data = g_data.clone();
@@ -75,25 +96,31 @@ impl ServerData {
             .await
             .entry(name)
             .and_modify(|e| *e = new_group_data);
+
+        Ok(())
     }
 
-    pub async fn set_group_answer(&self, name: impl AsRef<str>, answer: Answer) {
+    pub async fn set_group_answer(
+        &self,
+        name: impl AsRef<str>,
+        answer: Answer,
+    ) -> Result<(), GroupError> {
         let name = name.as_ref();
         let mut map = self.groups.lock().await;
         let Some(group_data) = &mut map.get_mut(name) else {
-            warn!("group \"{name}\" not found");
-            return;
+            return Err(GroupError::NotFound(name.to_owned()));
         };
         group_data.answer = Some(answer);
+        Ok(())
     }
 
-    pub async fn delete_group_answer(&self) {
+    pub async fn clear_group_answers(&self) {
         self.groups.lock().await.values_mut().for_each(|group| {
             group.answer = None;
         })
     }
 
-    pub async fn results(&self) {
+    pub async fn results(&self) -> Result<(), GroupError> {
         if self.current_question.load(Ordering::Relaxed) >= self.questions.lock().await.len() {
             panic!("Error by loading question");
         }
@@ -115,7 +142,7 @@ impl ServerData {
                 } => match answ {
                     Answer::Normal(ans) => {
                         if *solution == ans {
-                            self.set_group_points(entry.0, NORMAL_POINTS, false).await;
+                            self.set_group_points(entry.0, NORMAL_POINTS, false).await?;
                         }
                     }
                     _ => continue,
@@ -136,7 +163,7 @@ impl ServerData {
                 } => match answ {
                     Answer::Sort(ans) => {
                         if *solution == ans {
-                            self.set_group_points(entry.0, SORT_POINTS, false).await;
+                            self.set_group_points(entry.0, SORT_POINTS, false).await?;
                         }
                     }
                     _ => continue,
@@ -147,20 +174,20 @@ impl ServerData {
             estimate_list.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
             let est_g_1 = estimate_list[0].1.clone();
             self.set_group_points(est_g_1, ESTIMATE_1_POINTS, false)
-                .await;
+                .await?;
             let est_2_points = if estimate_list[0].0 == estimate_list[1].0 {
                 ESTIMATE_1_POINTS
             } else {
                 ESTIMATE_2_POINTS
             };
             let est_g_2 = estimate_list[1].1.clone();
-            self.set_group_points(est_g_2, est_2_points, false).await;
+            self.set_group_points(est_g_2, est_2_points, false).await?;
             let len_v = estimate_list.len();
             if len_v > 2 {
                 let mut i: usize = 2;
                 while estimate_list[i].0 == estimate_list[i - 1].0 {
                     let est_g = estimate_list[i].1.clone();
-                    self.set_group_points(est_g, est_2_points, false).await;
+                    self.set_group_points(est_g, est_2_points, false).await?;
                     i += 1;
                     if len_v <= i {
                         break;
@@ -168,6 +195,7 @@ impl ServerData {
                 }
             }
         }
+        Ok(())
     }
 }
 
@@ -194,7 +222,10 @@ impl EventBuffer {
     pub async fn pop(&self) -> Event {
         let permit = self.1.acquire().await.unwrap();
         permit.forget();
-        log::info!("Removed event from queue. Now {} events stored", self.0.len() - 1);
+        log::info!(
+            "Removed event from queue. Now {} events stored",
+            self.0.len() - 1
+        );
         self.0.pop().unwrap()
     }
 }
@@ -424,7 +455,7 @@ pub enum UpdateEvent {
     /// Shows the solution to the current question
     ShowSolution,
     ShowPoints,
-    ShowScore
+    ShowScore,
 }
 
 impl Display for UpdateEvent {
@@ -439,7 +470,7 @@ impl Display for UpdateEvent {
                 ShowAnswers => "show_answers",
                 ShowSolution => "show_solution",
                 ShowPoints => "show_points",
-                ShowScore => "show_score"
+                ShowScore => "show_score",
             }
         )
     }

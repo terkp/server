@@ -36,10 +36,14 @@ function sendAnswer() {
     let xhr = new XMLHttpRequest();
     xhr.open("POST", "/groups/set_answer", true);
     xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.send(data);
-
     xhr.onload = e => {
-        console.log(xhr.status)
-        console.log(xhr.statusText)
+        // If the group is not found, remove it from local storage and ask the user to login again
+        if (xhr.status >= 400 && xhr.status < 500 && xhr.responseText.includes("not found")) {
+            localStorage.removeItem("group_name")
+            alert("Bitte logge dich erneut ein");
+            window.location.href = "/login"
+        }
+        console.log(xhr.status.toString() + " " + xhr.responseText)
     }
+    xhr.send(data);
 }

@@ -1,20 +1,25 @@
-{% extends "display/index" %}
-{% block question_content%}
-<h1>Sortierfrage</h1>
+{% extends "display/index" %} {% block question_content%}
 
-<h2>{{ question }}</h2>
+<div class="container">
+  <h1>Sortierfrage</h1>
 
-A: {{ answers[0] }}<br>
-B: {{ answers[1] }}<br>
-C: {{ answers[2] }}<br>
-D: {{ answers[3] }}<br>
+  <h2>{{ question }}</h2>
 
-<div id="solution" style="display: none;">
-Lösung: 
-{{ letters[solution[0]] }}
-{{ letters[solution[1]] }}
-{{ letters[solution[2]] }}
-{{ letters[solution[3]] }}
+  <div class="grid">
+    <div class="answer"> A: {{ answers[0] }}</div>
+    <div class="answer"> B: {{ answers[1] }}</div>
+    <div class="answer"> C: {{ answers[2] }}</div>
+    <div class="answer"> D: {{ answers[3] }}</div>
+
+  </div>
+
+  <div id="solution" style="display: none">
+    Lösung:
+    {{ letters[solution[0]] }}
+    {{ letters[solution[1]] }}
+    {{ letters[solution[2]] }}
+    {{ letters[solution[3]] }}
+  </div>
 </div>
 
 {% endblock question_content%}

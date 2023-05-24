@@ -2,19 +2,21 @@ use std::collections::HashMap;
 
 use crate::server_data::{send_event, UpdateEvent};
 use crate::server_data::{Answer, GroupData, ServerData};
-use rocket::{serde::json::Json, State};
 use rocket::http::Status;
+use rocket::{serde::json::Json, State};
 use serde::Deserialize;
 use serde::Serialize;
 
 #[post("/new", format = "text/plain", data = "<group>")]
-pub async fn new_group(server_data: &State<ServerData>, group: String) -> Status {
-    server_data.insert_group(&group).await;
+pub async fn new_group(server_data: &State<ServerData>, group: String) -> (Status, String) {
+    if let Err(e) = server_data.insert_group(&group).await {
+        return (Status::UnprocessableEntity, e.to_string());
+    };
     debug!("{:?}", server_data.groups);
     //send group to anzeige and admin
     send_event(server_data, UpdateEvent::UpdateGroups).await;
     //format!("Group \"{group}\" created")
-    Status::Ok
+    (Status::Ok, format!("successfully inserted group '{group}'"))
 }
 
 #[get("/get")]
@@ -33,11 +35,20 @@ pub struct ScoreData {
 pub async fn set_points(
     server_data: &State<ServerData>,
     point_data: Json<ScoreData>,
-) -> Result<(), String> {
-    server_data
+) -> (Status, String) {
+    if let Err(e) = server_data
         .set_group_points(point_data.group_name.clone(), point_data.score, true)
-        .await;
-    Ok(())
+        .await
+    {
+        return (Status::UnprocessableEntity, e.to_string());
+    };
+    (
+        Status::Ok,
+        format!(
+            "set points for group '{}' to '{}'",
+            point_data.group_name, point_data.score
+        ),
+    )
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -62,12 +73,20 @@ impl TryInto<Answer> for AnswerData {
 pub async fn set_answer(
     server_data: &State<ServerData>,
     answer_data: Json<AnswerData>,
-) -> Result<String, String> {
+) -> (Status, String) {
     let group_name = answer_data.group_name.clone();
-    let answer = dbg!(answer_data.0.try_into()?);
-    server_data.set_group_answer(&group_name, answer).await;
+    let answer = match dbg!(answer_data.0.try_into()) {
+        Ok(v) => v,
+        Err(s) => return (Status::InternalServerError, s),
+    };
+    if let Err(e) = server_data.set_group_answer(&group_name, answer).await {
+        return (Status::UnprocessableEntity, e.to_string());
+    }
     send_event(server_data, UpdateEvent::UpdateGroups).await;
-    Ok(format!("Updated group \"{group_name}\"'s answer"))
+    (
+        Status::Ok,
+        format!("Updated group \"{group_name}\"'s answer"),
+    )
 }
 #[post("/delete", format = "text/plain", data = "<group>")]
 pub async fn del_group(server_data: &State<ServerData>, group: String) -> Status {

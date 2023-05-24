@@ -8,7 +8,10 @@ let isLoginPage = window.location.href.endsWith("/login");
 if (localStorage.getItem("group_name") === null && !isLoginPage) {
     window.location.href = "/login"
 }
-document.getElementById("current_group").innerHTML = "Deine Gruppe: " + localStorage.getItem("group_name")
+
+if (localStorage.getItem("group_name") !== null) {
+    document.getElementById("current_group").innerHTML = "Deine Gruppe: " + localStorage.getItem("group_name")
+}
 
 if (typeof (EventSource) !== "undefined") {
     //create an object, passing it the name and location of the server side script
@@ -22,7 +25,7 @@ if (typeof (EventSource) !== "undefined") {
             document.getElementById("buttonSend").disabled = true;
         } else if (event.data === "show_answers") {
             document.getElementById("buttonSend").disabled = true;
-        } else {
+        } else if (event.data === "question") {
             location.reload(true)
         }
     }

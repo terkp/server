@@ -45,7 +45,7 @@ pub async fn current_question(
 pub async fn next_question(server_data: &State<ServerData>) -> Redirect {
     server_data.current_question.fetch_add(1, Ordering::Relaxed);
     server_data.block_answer.store(false,Ordering::SeqCst);
-    server_data.delete_group_answer().await;
+    server_data.clear_group_answers().await;
     send_event(server_data, UpdateEvent::UpdateQuestions).await;
     Redirect::to(uri!("/questions", current_question()))
 }
@@ -55,7 +55,7 @@ pub async fn set_question(server_data: &State<ServerData>, question_num: String)
         Ok(value) => {
             server_data.current_question.store(value, Ordering::Relaxed);
             server_data.block_answer.store(false,Ordering::SeqCst);
-            server_data.delete_group_answer().await;
+            server_data.clear_group_answers().await;
             send_event(server_data, UpdateEvent::UpdateQuestions).await;
             Status::Ok
         }
@@ -68,10 +68,12 @@ pub async fn set_question(server_data: &State<ServerData>, question_num: String)
 }
 
 #[get("/results")]
-pub async fn results(server_data: &State<ServerData>) -> Status {
+pub async fn results(server_data: &State<ServerData>) -> Result<(), String> {
+    if let Err(e) = server_data.results().await {
+        return Err(e.to_string())
+    }
     send_event(server_data, UpdateEvent::ShowSolution).await;
-    server_data.results().await;
-    Status::Ok
+    Ok(())
 }
 #[get("/show_solution")]
 pub async fn show_solution(server_data: &State<ServerData>) -> Status {

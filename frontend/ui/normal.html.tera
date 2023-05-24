@@ -11,11 +11,12 @@ Deine Antwort: <span id="answer_content"></span>
 <div id="solution" style="display: none;">
 Lösung: {{ letters[solution] }}: {{ answers[solution] }}
 </div>
-
+<div id="answerButtons">
 <button id="buttonA" onclick="setAnswer(0)">A: {{ answers[0] }}</button><br>
 <button id="buttonB" onclick="setAnswer(1)">B: {{ answers[1] }}</button><br>
 <button id="buttonC" onclick="setAnswer(2)">C: {{ answers[2] }}</button><br>
 <button id="buttonD" onclick="setAnswer(3)">D: {{ answers[3] }}</button><br>
+</div>
 <br>
 <button id="buttonSend" onclick="sendAnswer()" disabled>Antwort Senden</button><br>
 

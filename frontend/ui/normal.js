@@ -3,8 +3,10 @@ let letters = ['A', 'B', 'C', 'D']
 
 function setAnswer(answer) {
     current_answer = answer;
-    document.getElementById("answer_content").innerHTML = letters[current_answer]
-    document.getElementById("answer").style.display = "block";
+    document.querySelectorAll("#answerButtons button").forEach(b => {
+        b.disabled = false;
+    })
+    document.getElementById("button" + letters[answer]).disabled = true;
     document.getElementById("buttonSend").disabled = false;
 }
 
@@ -17,5 +19,16 @@ function sendAnswer() {
     let xhr = new XMLHttpRequest();
     xhr.open("POST", "/groups/set_answer", true);
     xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.onload = e => {
+        // If the group is not found, remove it from local storage and ask the user to login again
+        if (xhr.status >= 400 && xhr.status < 500 && xhr.responseText.includes("not found")) {
+            localStorage.removeItem("group_name")
+            alert("Bitte logge dich erneut ein");
+            window.location.href = "/login"
+        } else if (xhr.status == 200) {
+            document.getElementById("answer_content").innerHTML = letters[current_answer]
+            document.getElementById("answer").style.display = "block";
+        }
+    }
     xhr.send(data);
 }
