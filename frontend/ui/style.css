@@ -1,6 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&display=swap");
 
-
 html,
 body {
   height: 100%;
@@ -10,25 +9,25 @@ body {
 }
 
 body {
-    background-image: linear-gradient(#ffffff, #00aaff, #0055dd);
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: cover;
-    display: flex; /* Use flexbox layout */
-    flex-direction: column;
-    margin: 0px;
-    padding: 0px;
+  background-image: linear-gradient(#ffffff, #00aaff, #0055dd);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  display: flex; /* Use flexbox layout */
+  flex-direction: column;
+  margin: 0px;
+  padding: 0px;
 }
 
 #root {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: 1em;
-    height: 100vh;
-    overflow: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 1em;
+  height: 100vh;
+  overflow: auto;
 }
 
 header {
@@ -39,14 +38,6 @@ header {
 #solution {
   margin-top: 20px;
   display: none;
-}
-
-h1 {
-  font-size: 6vmin;
-}
-
-h2 {
-  font-size: 4vmin;
 }
 
 h1,
@@ -84,7 +75,30 @@ h2 {
   border-radius: 0.75em;
   margin: 0.5em 1em;
   width: 100%;
-  font-size: 3vmin;
+}
+
+@media (orientation: landscape) {
+  h1 {
+    font-size: 6vmin;
+  }
+
+  h2 {
+    font-size: 4vmin;
+  }
+
+   .answerButton, #answer, #solution, #currentAnswer {
+    font-size: 3vmin;
+  }
+}
+
+@media (orientation: portrait) {
+  h1 {
+    font-size: 5vmax;
+  }
+
+  .answerButton, #answer, h2, #solution, #currentAnswer {
+    font-size: 3vmax;
+  }
 }
 
 #loginContent {
@@ -115,6 +129,12 @@ h2 {
   border-radius: 1em;
   margin: 0.5em 1em;
   font-size: larger;
+}
+
+button:disabled.answerButton {
+    border-color: blue;
+    background-color: #00aaff;
+    color: white;
 }
 
 #answerInput {
