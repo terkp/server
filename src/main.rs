@@ -74,7 +74,6 @@ pub async fn events(server_data: &State<ServerData>, mut shutdown: Shutdown) -> 
         .take(EVENT_BUFFER_KEY_LENGTH)
         .map(char::from)
         .collect::<String>();
-    server_data.clients.lock().await.insert(key.clone());
     server_data
         .client_event_buffers
         .insert(key.clone(), EventBuffer::with_capacity(4));

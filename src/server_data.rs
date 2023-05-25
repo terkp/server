@@ -1,7 +1,7 @@
 #![allow(clippy::result_large_err)]
 
-use chashmap::CHashMap;
 use crossbeam::queue::ArrayQueue;
+use dashmap::{mapref::entry::Entry, DashMap};
 use log::{info, warn};
 use rocket::{
     response::stream::Event,
@@ -9,11 +9,7 @@ use rocket::{
     State,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::Entry;
-use std::{
-    collections::HashMap, str::FromStr, sync::atomic::AtomicBool, sync::atomic::AtomicUsize,
-};
-use std::{collections::HashSet, fmt::Display, sync::atomic::Ordering};
+use std::{fmt::Display, sync::atomic::{Ordering, AtomicBool, AtomicUsize}, str::FromStr};
 use thiserror::Error;
 
 const NORMAL_POINTS: isize = 1;
@@ -31,14 +27,13 @@ const QUESTION_TYPES: [&str; 3] = [NORMAL_NAME, ESTIMATE_NAME, SORT_NAME];
 
 #[derive(Default, Debug)]
 pub struct ServerData {
-    pub groups: Mutex<HashMap<String, GroupData>>,
+    pub groups: DashMap<String, GroupData>,
     pub questions: Mutex<Vec<Question>>,
     pub current_question: AtomicUsize,
     pub block_answer: AtomicBool,
-    pub clients: Mutex<HashSet<String>>,
-    pub client_event_buffers: CHashMap<String, EventBuffer>, // nächste frage event -> event_buffer
-                                                             // ui <- nächste frage event
-                                                             // display <- ????
+    pub client_event_buffers: DashMap<String, EventBuffer>, // nächste frage event -> event_buffer
+                                                            // ui <- nächste frage event
+                                                            // display <- ????
 }
 
 #[derive(Error, Debug, PartialEq, Clone, Hash)]
@@ -50,8 +45,8 @@ pub enum GroupError {
 }
 
 impl ServerData {
-    pub async fn insert_group(&self, name: &str) -> Result<(), GroupError> {
-        match self.groups.lock().await.entry(name.to_owned()) {
+    pub fn insert_group(&self, name: &str) -> Result<(), GroupError> {
+        match self.groups.entry(name.to_owned()) {
             Entry::Vacant(v) => {
                 v.insert(GroupData::default());
                 Ok(())
@@ -60,52 +55,39 @@ impl ServerData {
         }
     }
 
-    pub async fn delete_group(&self, name: &str) {
-        let mut map = self.groups.lock().await;
-
-        if map.remove(name).is_some() {
+    pub fn delete_group(&self, name: &str) {
+        if self.groups.remove(name).is_some() {
             info!("group with name '{}' deleted.", name);
         } else {
             info!("group with name '{}' not found.", name);
         }
     }
 
-    pub async fn set_group_points(
-        &self,
-        name: impl AsRef<str>,
-        number: isize,
-    ) -> Result<(), GroupError> {
+    pub fn set_group_points(&self, name: impl AsRef<str>, number: isize) -> Result<(), GroupError> {
         let name = name.as_ref();
-        let mut map = self.groups.lock().await;
-        let Some(g_data) = map.get_mut(name) else {
+        let Some(mut g_data) = self.groups.get_mut(name) else {
             return Err(GroupError::NotFound(name.to_owned()))
         };
         g_data.score = number;
         Ok(())
     }
 
-    pub async fn add_group_points(
-        &self,
-        name: impl AsRef<str>,
-        number: isize,
-    ) -> Result<(), GroupError> {
+    pub fn add_group_points(&self, name: impl AsRef<str>, number: isize) -> Result<(), GroupError> {
         let name = name.as_ref();
-        let mut map = self.groups.lock().await;
-        let Some(g_data) = map.get_mut(name) else {
+        let Some(mut g_data) = self.groups.get_mut(name) else {
             return Err(GroupError::NotFound(name.to_owned()))
         };
         g_data.score += number;
         Ok(())
     }
 
-    pub async fn set_group_answer(
+    pub fn set_group_answer(
         &self,
         name: impl AsRef<str>,
         answer: Answer,
     ) -> Result<(), GroupError> {
         let name = name.as_ref();
-        let mut map = self.groups.lock().await;
-        let Some(group_data) = &mut map.get_mut(name) else {
+        let Some(mut group_data) = self.groups.get_mut(name) else {
             return Err(GroupError::NotFound(name.to_owned()));
         };
         group_data.answer = Some(answer);
@@ -113,7 +95,7 @@ impl ServerData {
     }
 
     pub async fn clear_group_answers(&self) {
-        self.groups.lock().await.values_mut().for_each(|group| {
+        self.groups.iter_mut().for_each(|mut group| {
             group.answer = None;
         })
     }
@@ -125,10 +107,9 @@ impl ServerData {
         let current_question_idx = self.current_question.load(Ordering::Relaxed);
         let question = self.questions.lock().await[current_question_idx].clone();
 
-        let map = self.groups.lock().await.clone();
         let mut estimate_list: Vec<(f64, String)> = Vec::new();
-        for entry in map {
-            let answ: Answer = match entry.1.answer {
+        for mut entry in self.groups.iter_mut() {
+            let answ = match &entry.answer {
                 Some(a) => a,
                 None => continue,
             };
@@ -139,8 +120,8 @@ impl ServerData {
                     solution,
                 } => match answ {
                     Answer::Normal(ans) => {
-                        if *solution == ans {
-                            self.add_group_points(entry.0, NORMAL_POINTS).await?;
+                        if solution == ans {
+                            entry.add_score(NORMAL_POINTS);
                         }
                     }
                     _ => continue,
@@ -150,7 +131,7 @@ impl ServerData {
                     solution,
                 } => match answ {
                     Answer::Estimate(ans) => {
-                        estimate_list.push(((solution - ans).abs(), entry.0));
+                        estimate_list.push(((solution - ans).abs(), entry.key().clone()));
                     }
                     _ => continue,
                 },
@@ -160,8 +141,8 @@ impl ServerData {
                     solution,
                 } => match answ {
                     Answer::Sort(ans) => {
-                        if *solution == ans {
-                            self.add_group_points(entry.0, SORT_POINTS).await?;
+                        if solution == ans {
+                            entry.add_score(SORT_POINTS);
                         }
                     }
                     _ => continue,
@@ -171,20 +152,20 @@ impl ServerData {
         if !estimate_list.is_empty() {
             estimate_list.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
             let est_g_1 = estimate_list[0].1.clone();
-            self.add_group_points(est_g_1, ESTIMATE_1_POINTS).await?;
+            self.add_group_points(est_g_1, ESTIMATE_1_POINTS)?;
             let est_2_points = if estimate_list[0].0 == estimate_list[1].0 {
                 ESTIMATE_1_POINTS
             } else {
                 ESTIMATE_2_POINTS
             };
             let est_g_2 = estimate_list[1].1.clone();
-            self.add_group_points(est_g_2, est_2_points).await?;
+            self.add_group_points(est_g_2, est_2_points)?;
             let len_v = estimate_list.len();
             if len_v > 2 {
                 let mut i: usize = 2;
                 while estimate_list[i].0 == estimate_list[i - 1].0 {
                     let est_g = estimate_list[i].1.clone();
-                    self.add_group_points(est_g, est_2_points).await?;
+                    self.add_group_points(est_g, est_2_points)?;
                     i += 1;
                     if len_v <= i {
                         break;
@@ -237,6 +218,16 @@ impl Default for EventBuffer {
 pub struct GroupData {
     pub score: isize,
     pub answer: Option<Answer>,
+}
+
+impl GroupData {
+    pub fn add_score(&mut self, points: isize) {
+        self.score += points;
+    }
+
+    pub fn set_score(&mut self, score: isize) {
+        self.score = score;
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -479,19 +470,14 @@ pub async fn send_event(server_data: &State<ServerData>, event: UpdateEvent) {
     // The buffers we want to delete since they don't seem to be connected anymore
     let mut to_delete = vec![];
     // Write the event into every event buffer available
-    for id in server_data.clients.lock().await.iter() {
-        let Some(buffer) = server_data.client_event_buffers.get(id) else {
-            warn!("buffer corresponding to id {id} not found");
-            continue;
-        };
+    for buffer in server_data.client_event_buffers.iter() {
         if buffer.push(Event::data(event.to_string())).is_err() {
+            let id = buffer.key().clone();
             warn!("event dropped for buffer {id}! the queue is full. assuming the client is not connected and deleting the buffer");
-            to_delete.push(id.clone());
+            to_delete.push(id);
         }
     }
-    let mut clients = server_data.clients.lock().await;
     for name in to_delete {
         server_data.client_event_buffers.remove(&name);
-        clients.remove(&name);
     }
 }

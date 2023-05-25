@@ -9,7 +9,7 @@ use serde::Serialize;
 
 #[post("/new", format = "text/plain", data = "<group>")]
 pub async fn new_group(server_data: &State<ServerData>, group: String) -> (Status, String) {
-    if let Err(e) = server_data.insert_group(&group).await {
+    if let Err(e) = server_data.insert_group(&group) {
         return (Status::UnprocessableEntity, e.to_string());
     };
     debug!("{:?}", server_data.groups);
@@ -21,7 +21,13 @@ pub async fn new_group(server_data: &State<ServerData>, group: String) -> (Statu
 
 #[get("/get")]
 pub async fn get_all_groups(server_data: &State<ServerData>) -> Json<HashMap<String, GroupData>> {
-    Json(server_data.groups.lock().await.clone())
+    Json(
+        server_data
+            .groups
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().clone()))
+            .collect(),
+    )
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -36,10 +42,7 @@ pub async fn set_points(
     server_data: &State<ServerData>,
     point_data: Json<ScoreData>,
 ) -> (Status, String) {
-    if let Err(e) = server_data
-        .set_group_points(point_data.group_name.clone(), point_data.score)
-        .await
-    {
+    if let Err(e) = server_data.set_group_points(point_data.group_name.clone(), point_data.score) {
         return (Status::UnprocessableEntity, e.to_string());
     };
     (
@@ -79,7 +82,7 @@ pub async fn set_answer(
         Ok(v) => v,
         Err(s) => return (Status::InternalServerError, s),
     };
-    if let Err(e) = server_data.set_group_answer(&group_name, answer).await {
+    if let Err(e) = server_data.set_group_answer(&group_name, answer) {
         return (Status::UnprocessableEntity, e.to_string());
     }
     send_event(server_data, UpdateEvent::UpdateGroups).await;
@@ -90,7 +93,7 @@ pub async fn set_answer(
 }
 #[post("/delete", format = "text/plain", data = "<group>")]
 pub async fn del_group(server_data: &State<ServerData>, group: String) -> Status {
-    server_data.delete_group(&group).await;
+    server_data.delete_group(&group);
     debug!("{:?}", server_data.groups);
     //send group to anzeige and admin
     send_event(server_data, UpdateEvent::UpdateGroups).await;

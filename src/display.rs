@@ -2,9 +2,7 @@ use std::sync::atomic::Ordering;
 
 use crate::server_data::{Question, ServerData};
 use log::debug;
-use rocket::{
-    State,
-};
+use rocket::State;
 use rocket_dyn_templates::{context, Template};
 use serde::Serialize;
 
@@ -16,12 +14,20 @@ struct GroupScore {
 
 #[get("/score")]
 pub async fn show_score(server_data: &State<ServerData>) -> Template {
-    let questions = &server_data.groups.lock().await;
-
-    let groups = questions.iter().map(|(name, data)| GroupScore {name: name.clone(), score: data.score}).collect::<Vec<_>>();
-    Template::render("display/score", context! {
-        groups
-    })
+    let groups = server_data
+        .groups
+        .iter()
+        .map(|entry| GroupScore {
+            name: entry.key().clone(),
+            score: entry.score,
+        })
+        .collect::<Vec<_>>();
+    Template::render(
+        "display/score",
+        context! {
+            groups
+        },
+    )
 }
 
 #[get("/")]
@@ -75,4 +81,3 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
         ),
     }
 }
-
