@@ -74,29 +74,27 @@ impl ServerData {
         &self,
         name: impl AsRef<str>,
         number: isize,
-        set: bool,
     ) -> Result<(), GroupError> {
-        let name = name.as_ref().to_owned();
-        let mut map = self.groups.lock().await.clone();
-        let matches = match map.entry(name.clone()) {
-            Entry::Occupied(o) => o,
-            _ => return Err(GroupError::NotFound(name)),
+        let name = name.as_ref();
+        let mut map = self.groups.lock().await;
+        let Some(g_data) = map.get_mut(name) else {
+            return Err(GroupError::NotFound(name.to_owned()))
         };
-        let g_data: &GroupData = matches.get();
-        let mut new_group_data = g_data.clone();
-        let score = if !set {
-            new_group_data.score + number
-        } else {
-            number
+        g_data.score = number;
+        Ok(())
+    }
+
+    pub async fn add_group_points(
+        &self,
+        name: impl AsRef<str>,
+        number: isize,
+    ) -> Result<(), GroupError> {
+        let name = name.as_ref();
+        let mut map = self.groups.lock().await;
+        let Some(g_data) = map.get_mut(name) else {
+            return Err(GroupError::NotFound(name.to_owned()))
         };
-
-        new_group_data.score = score;
-        self.groups
-            .lock()
-            .await
-            .entry(name)
-            .and_modify(|e| *e = new_group_data);
-
+        g_data.score += number;
         Ok(())
     }
 
@@ -142,7 +140,7 @@ impl ServerData {
                 } => match answ {
                     Answer::Normal(ans) => {
                         if *solution == ans {
-                            self.set_group_points(entry.0, NORMAL_POINTS, false).await?;
+                            self.add_group_points(entry.0, NORMAL_POINTS).await?;
                         }
                     }
                     _ => continue,
@@ -163,7 +161,7 @@ impl ServerData {
                 } => match answ {
                     Answer::Sort(ans) => {
                         if *solution == ans {
-                            self.set_group_points(entry.0, SORT_POINTS, false).await?;
+                            self.add_group_points(entry.0, SORT_POINTS).await?;
                         }
                     }
                     _ => continue,
@@ -173,21 +171,20 @@ impl ServerData {
         if !estimate_list.is_empty() {
             estimate_list.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
             let est_g_1 = estimate_list[0].1.clone();
-            self.set_group_points(est_g_1, ESTIMATE_1_POINTS, false)
-                .await?;
+            self.add_group_points(est_g_1, ESTIMATE_1_POINTS).await?;
             let est_2_points = if estimate_list[0].0 == estimate_list[1].0 {
                 ESTIMATE_1_POINTS
             } else {
                 ESTIMATE_2_POINTS
             };
             let est_g_2 = estimate_list[1].1.clone();
-            self.set_group_points(est_g_2, est_2_points, false).await?;
+            self.add_group_points(est_g_2, est_2_points).await?;
             let len_v = estimate_list.len();
             if len_v > 2 {
                 let mut i: usize = 2;
                 while estimate_list[i].0 == estimate_list[i - 1].0 {
                     let est_g = estimate_list[i].1.clone();
-                    self.set_group_points(est_g, est_2_points, false).await?;
+                    self.add_group_points(est_g, est_2_points).await?;
                     i += 1;
                     if len_v <= i {
                         break;

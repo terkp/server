@@ -37,7 +37,7 @@ pub async fn set_points(
     point_data: Json<ScoreData>,
 ) -> (Status, String) {
     if let Err(e) = server_data
-        .set_group_points(point_data.group_name.clone(), point_data.score, true)
+        .set_group_points(point_data.group_name.clone(), point_data.score)
         .await
     {
         return (Status::UnprocessableEntity, e.to_string());

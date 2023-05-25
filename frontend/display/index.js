@@ -7,14 +7,14 @@ updateGroups()
 
 if (typeof (EventSource) !== "undefined") {
     //create an object, passing it the name and location of the server side script
-    var eSource = new EventSource("http://localhost:8000/events");
+    var eSource = new EventSource("/events");
     //detect message receipt
     eSource.onmessage = function (event) {
         //write the received data to the page
         if (event.data === "show_solution") {
             document.getElementById("solution").style.display = "block"
         } else if (event.data === "show_answers") {
-            editCSS.innerHTML = ".answerText {display: block;}";
+            editCSS.innerHTML = ".groupAnswerText {display: block;}";
         } else if (event.data === "show_score") {
             window.location.href = "/display/score"
         } else if (event.data === "groups") {
@@ -54,9 +54,9 @@ function updateGroups() {
             let answer = answers[groupName]
             let answerText = ""
             if (answer["answer"] != null) {
-                answerText = "<span class=\"answerText\">" + answerToString(answer["answer"]) + "</span>"
+                answerText = "<span class=\"groupAnswerText\">" + answerToString(answer["answer"]).trim() + "</span>"
             }
-            answersElement.innerHTML += "<span class=\"groupName\">" + groupName + ":<\span>" + answerText + "<br>"
+            answersElement.innerHTML += "<div class=\"groupAnswer\"><span class=\"groupName\">" + groupName.trim() + "</span>: " + answerText.trim() + "<br></div>"
         }
     }
 

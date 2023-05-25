@@ -6,14 +6,13 @@
   <h2>{{ question }}</h2>
 
   <div class="grid">
-    <div class="answer"> A: {{ answers[0] }}</div>
-    <div class="answer"> B: {{ answers[1] }}</div>
-    <div class="answer"> C: {{ answers[2] }}</div>
-    <div class="answer"> D: {{ answers[3] }}</div>
-
+    <div class="answer">A: {{ answers[0] }}</div>
+    <div class="answer">B: {{ answers[1] }}</div>
+    <div class="answer">C: {{ answers[2] }}</div>
+    <div class="answer">D: {{ answers[3] }}</div>
   </div>
 
-  <div id="solution" style="display: none">
+  <div id="solution" class="answer" style="display: none">
     Lösung:
     {{ letters[solution[0]] }}
     {{ letters[solution[1]] }}
