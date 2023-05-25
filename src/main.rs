@@ -1,12 +1,21 @@
-use std::{path::{Path, PathBuf}, sync::{atomic::Ordering, Arc}};
+use std::{
+    path::{Path, PathBuf},
+    sync::{atomic::Ordering, Arc},
+};
 
 use rand::{distributions::Alphanumeric, Rng};
-use rocket::{fs::NamedFile, State, response::stream::{Event, EventStream}, Shutdown, tokio::select, http::{Header, Status}, Request, Response, fairing::{Kind, Info, Fairing}};
-use rocket_dyn_templates::{Template, context};
-use simplelog::{TermLogger, ConfigBuilder};
+use rocket::{
+    fairing::{Fairing, Info, Kind},
+    fs::NamedFile,
+    http::{Header, Status},
+    response::stream::{Event, EventStream},
+    tokio::select,
+    Request, Response, Shutdown, State,
+};
+use rocket_dyn_templates::{context, Template};
+use simplelog::{ConfigBuilder, TermLogger};
 
-use crate::server_data::{ServerData, EVENT_BUFFER_KEY_LENGTH, EventBuffer, Question};
-
+use crate::server_data::{EventBuffer, Question, ServerData, EVENT_BUFFER_KEY_LENGTH};
 
 #[macro_use]
 extern crate rocket;
@@ -68,7 +77,10 @@ fn setup_logger() {
 }
 
 #[get("/events")]
-pub async fn events(server_data: &State<ServerData>, mut shutdown: Shutdown) -> EventStream![Event + '_] {
+pub async fn events(
+    server_data: &State<ServerData>,
+    mut shutdown: Shutdown,
+) -> EventStream![Event + '_] {
     let key = rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(EVENT_BUFFER_KEY_LENGTH)
@@ -113,6 +125,7 @@ fn rocket() -> _ {
             routes![
                 questions::load_questions,
                 questions::current_question,
+                questions::current_question_state,
                 questions::next_question,
                 questions::results,
                 questions::show_answers,

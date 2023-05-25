@@ -1,6 +1,6 @@
 #![allow(clippy::result_large_err)]
 
-use crossbeam::queue::ArrayQueue;
+use crossbeam::{atomic::AtomicConsume, queue::ArrayQueue};
 use dashmap::{mapref::entry::Entry, DashMap};
 use log::{info, warn};
 use rocket::{
@@ -9,7 +9,14 @@ use rocket::{
     State,
 };
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, sync::{atomic::{Ordering, AtomicBool, AtomicUsize}, Arc}, str::FromStr};
+use std::{
+    fmt::Display,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
+    },
+};
 use thiserror::Error;
 
 const NORMAL_POINTS: isize = 1;
@@ -30,10 +37,43 @@ pub struct ServerData {
     pub groups: DashMap<String, GroupData>,
     pub questions: Mutex<Vec<Question>>,
     pub current_question: AtomicUsize,
+    pub question_state: QuestionState,
     pub block_answer: AtomicBool,
     pub client_event_buffers: DashMap<String, Arc<EventBuffer>>, // nächste frage event -> event_buffer
-                                                            // ui <- nächste frage event
-                                                            // display <- ????
+                                                                 // ui <- nächste frage event
+                                                                 // display <- ????
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct QuestionState {
+    #[serde(rename = "answerIsShown")]
+    answer_is_shown: AtomicBool,
+    #[serde(rename = "solutionIsShown")]
+    solution_is_shown: AtomicBool,
+}
+
+impl QuestionState {
+    pub fn reset(&self) {
+        self.answer_is_shown.store(false, Ordering::Relaxed);
+        self.solution_is_shown.store(false, Ordering::Relaxed);
+    }
+
+    pub fn show_answers(&self) {
+        self.answer_is_shown.store(true, Ordering::Relaxed)
+    }
+
+    pub fn show_solution(&self) {
+        self.solution_is_shown.store(true, Ordering::Relaxed)
+    }
+}
+
+impl Clone for QuestionState {
+    fn clone(&self) -> Self {
+        Self {
+            answer_is_shown: self.answer_is_shown.load(Ordering::Relaxed).into(),
+            solution_is_shown: self.solution_is_shown.load(Ordering::Relaxed).into(),
+        }
+    }
 }
 
 #[derive(Error, Debug, PartialEq, Clone, Hash)]
@@ -42,6 +82,8 @@ pub enum GroupError {
     NotFound(String),
     #[error("group with name '{0}' already exists")]
     Duplicate(String),
+    #[error("question with index '{0}' does not exist")]
+    InvalidQuestion(usize),
 }
 
 impl ServerData {
@@ -101,11 +143,10 @@ impl ServerData {
     }
 
     pub async fn results(&self) -> Result<(), GroupError> {
-        if self.current_question.load(Ordering::Relaxed) >= self.questions.lock().await.len() {
-            panic!("Error by loading question");
-        }
         let current_question_idx = self.current_question.load(Ordering::Relaxed);
-        let question = self.questions.lock().await[current_question_idx].clone();
+        let Some(question) = self.questions.lock().await.get(current_question_idx).cloned() else {
+            return Err(GroupError::InvalidQuestion(current_question_idx))
+        };
 
         let mut estimate_list: Vec<(f64, String)> = Vec::new();
         for mut entry in self.groups.iter_mut() {
@@ -382,7 +423,7 @@ impl FromStr for Question {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Answer {
     Normal(usize),
     Estimate(f64),
