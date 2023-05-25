@@ -1,4 +1,4 @@
-use std::{path::{Path, PathBuf}, sync::atomic::Ordering};
+use std::{path::{Path, PathBuf}, sync::{atomic::Ordering, Arc}};
 
 use rand::{distributions::Alphanumeric, Rng};
 use rocket::{fs::NamedFile, State, response::stream::{Event, EventStream}, Shutdown, tokio::select, http::{Header, Status}, Request, Response, fairing::{Kind, Info, Fairing}};
@@ -74,16 +74,16 @@ pub async fn events(server_data: &State<ServerData>, mut shutdown: Shutdown) -> 
         .take(EVENT_BUFFER_KEY_LENGTH)
         .map(char::from)
         .collect::<String>();
+    let buffer = Arc::new(EventBuffer::with_capacity(4));
     server_data
         .client_event_buffers
-        .insert(key.clone(), EventBuffer::with_capacity(4));
+        .insert(key.clone(), Arc::clone(&buffer));
     debug!("Added event buffer with id \"{key}\"");
 
     EventStream! {
         loop {
-            let temp = server_data.client_event_buffers.get(&key).unwrap();
             select! {
-                event = temp.pop() => { yield event; }
+                event = buffer.pop() => { yield event; }
                 _ = &mut shutdown => {
                     break;
                 }

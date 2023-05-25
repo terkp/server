@@ -9,7 +9,7 @@ use rocket::{
     State,
 };
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, sync::atomic::{Ordering, AtomicBool, AtomicUsize}, str::FromStr};
+use std::{fmt::Display, sync::{atomic::{Ordering, AtomicBool, AtomicUsize}, Arc}, str::FromStr};
 use thiserror::Error;
 
 const NORMAL_POINTS: isize = 1;
@@ -31,7 +31,7 @@ pub struct ServerData {
     pub questions: Mutex<Vec<Question>>,
     pub current_question: AtomicUsize,
     pub block_answer: AtomicBool,
-    pub client_event_buffers: DashMap<String, EventBuffer>, // nächste frage event -> event_buffer
+    pub client_event_buffers: DashMap<String, Arc<EventBuffer>>, // nächste frage event -> event_buffer
                                                             // ui <- nächste frage event
                                                             // display <- ????
 }
