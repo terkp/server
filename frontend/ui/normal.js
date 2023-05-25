@@ -3,7 +3,7 @@ let letters = ['A', 'B', 'C', 'D']
 
 function setAnswer(answer) {
     current_answer = answer;
-    document.querySelectorAll("#answerButtons button").forEach(b => {
+    document.querySelectorAll("#answerContainer button").forEach(b => {
         b.disabled = false;
     })
     document.getElementById("button" + letters[answer]).disabled = true;
@@ -26,7 +26,7 @@ function sendAnswer() {
             alert("Bitte logge dich erneut ein");
             window.location.href = "/login"
         } else if (xhr.status == 200) {
-            document.getElementById("answer_content").innerHTML = letters[current_answer]
+            document.getElementById("answerContent").innerHTML = letters[current_answer]
             document.getElementById("answer").style.display = "block";
         }
     }

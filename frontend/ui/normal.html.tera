@@ -1,24 +1,21 @@
 {% extends "ui/index" %}
-{% block question_content %}
+
+{% block question_type %}
+Frage
+{% endblock question_type %}
+
+
+{% block answers %}
 <script type = "text/javascript" src="ui/normal.js"></script>
-<h1>Frage</h1>
 
-<h2>{{ question }}</h2>
-
-<div id="answer" style="display: none;">
-Deine Antwort: <span id="answer_content"></span>
-</div>
-<div id="solution" style="display: none;">
-Lösung: {{ letters[solution] }}: {{ answers[solution] }}
-</div>
-<div id="answerButtons">
-<button id="buttonA" onclick="setAnswer(0)">A: {{ answers[0] }}</button><br>
-<button id="buttonB" onclick="setAnswer(1)">B: {{ answers[1] }}</button><br>
-<button id="buttonC" onclick="setAnswer(2)">C: {{ answers[2] }}</button><br>
-<button id="buttonD" onclick="setAnswer(3)">D: {{ answers[3] }}</button><br>
-</div>
-<br>
-<button id="buttonSend" onclick="sendAnswer()" disabled>Antwort Senden</button><br>
+<button id="buttonA" class="answerButton" onclick="setAnswer(0)">A: {{ answers[0] }}</button><br>
+<button id="buttonB" class="answerButton" onclick="setAnswer(1)">B: {{ answers[1] }}</button><br>
+<button id="buttonC" class="answerButton" onclick="setAnswer(2)">C: {{ answers[2] }}</button><br>
+<button id="buttonD" class="answerButton" onclick="setAnswer(3)">D: {{ answers[3] }}</button><br>
+{% endblock answers %}
 
 
-{% endblock question_content%}
+{% block solution %}
+{{ letters[solution] }}: {{ answers[solution] }}
+{% endblock solution %}
+

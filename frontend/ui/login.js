@@ -1,6 +1,6 @@
 function sendGroupName() {
     event.preventDefault();
-    let name = document.getElementById("group_name_input").value;
+    let name = document.getElementById("groupNameInput").value;
 
     if (name.length === 0) {
         alert("Der Gruppenname darf nicht leer sein!")

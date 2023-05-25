@@ -1,10 +1,21 @@
-{% extends "ui/index" %}
-{% block question_content%}
-<script type = "text/javascript" src="ui/login.js"></script>
-
-<label for="group_name_input">Gruppenname: </label>
-<input id="group_name_input" type="text" name="group_name">
-<button id="buttonSend" type="button" onclick="sendGroupName()">Senden</button>
-
-
-{% endblock question_content%}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="ui/style.css" />
+    <link rel="stylesheet" href="ui/login.css" />
+    <title>Quiz</title>
+  </head>
+  <body>
+    <script type="text/javascript" src="ui/login.js"></script>
+    <div id="loginContent">
+      <label id="groupNameLoginLabel" for="groupNameInput">Gruppenname: </label>
+      <input id="groupNameInput" type="text" name="group_name" />
+      <button id="buttonSend" type="button" onclick="sendGroupName()">
+        Senden
+      </button>
+    </div>
+  </body>
+</html>

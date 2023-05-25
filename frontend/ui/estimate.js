@@ -11,6 +11,13 @@ function sendAnswer() {
     if (current_answer === undefined) {
         return;
     }
+    if (isNaN(parseInt(current_answer))) {
+        alert("Bitte Zahl eingeben!")
+        current_answer = undefined;
+        document.getElementById("buttonSend").disabled = true;
+        document.getElementById("answerInput").value = "";
+        return
+    }
     var name = localStorage.getItem("group_name")
     var data = JSON.stringify({ name: name, type: "schaetzen", answer: current_answer.toString() })
     console.log(data)

@@ -8,8 +8,7 @@
     <title>Quiz</title>
 </head>
 <body>
-
-    {% block question_content %}{% endblock question_content %}
+    {% block answers %}{% endblock answers %}
     <div id="group_answers"></div>
     <script type = "text/javascript" src="display/index.js"></script>
 </body>

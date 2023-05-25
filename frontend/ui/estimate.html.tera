@@ -1,16 +1,17 @@
 {% extends "ui/index" %}
-{% block question_content%}
+
+{% block question_type %}
+Schätzfrage
+{% endblock question_type %}
+
+
+{% block answers%}
 <script type = "text/javascript" src="ui/estimate.js"></script>
-<h1>Schätzfrage</h1>
-
-<h2>{{ question }}</h2>
-
-<div id="solution" style="display: none;">
-Lösung: {{ solution }}
-</div>
 
 <input type="number" id="answerInput" onchange="setAnswer()"/>
-<br>
-<button id="buttonSend" onclick="sendAnswer()" disabled>Antwort Senden</button><br>
+{% endblock answers%}
 
-{% endblock question_content%}
+
+{% block solution %}
+{{ solution }}
+{% endblock solution %}

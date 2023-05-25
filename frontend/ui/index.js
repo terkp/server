@@ -10,7 +10,7 @@ if (localStorage.getItem("group_name") === null && !isLoginPage) {
 }
 
 if (localStorage.getItem("group_name") !== null) {
-    document.getElementById("current_group").innerHTML = "Deine Gruppe: " + localStorage.getItem("group_name")
+    document.getElementById("currentGroup").innerHTML = "Deine Gruppe: " + localStorage.getItem("group_name")
 }
 
 if (typeof (EventSource) !== "undefined") {

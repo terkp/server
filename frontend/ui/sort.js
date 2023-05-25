@@ -3,8 +3,8 @@ let letters = ['A', 'B', 'C', 'D']
 
 function addAnswer(answer) {
     current_answer.push(answer);
-    document.getElementById("answer_content").innerHTML += letters[answer]
-    document.getElementById("answer").style.display = "block";
+    document.getElementById("currentAnswer").innerHTML += letters[answer]
+    document.getElementById("currentAnswer").style.display = "block";
     document.getElementById("button" + letters[answer]).disabled = true;
     if (current_answer.length === 4) {
         document.getElementById("buttonSend").disabled = false;
@@ -13,8 +13,8 @@ function addAnswer(answer) {
 
 function clearAnswer() {
     current_answer = []
-    document.getElementById("answer_content").innerHTML = ""
-    document.getElementById("answer").style.display = "none";
+    document.getElementById("currentAnswer").innerHTML = ""
+    document.getElementById("currentAnswer").style.display = "none";
     document.getElementById("buttonA").disabled = false;
     document.getElementById("buttonB").disabled = false;
     document.getElementById("buttonC").disabled = false;
@@ -42,7 +42,16 @@ function sendAnswer() {
             localStorage.removeItem("group_name")
             alert("Bitte logge dich erneut ein");
             window.location.href = "/login"
+        } else if (xhr.status == 200) {
+            let answerElement = document.getElementById("answerContent");
+            answerElement.innerHTML = ""
+            for (const choice of current_answer) {
+                answerElement.innerHTML += letters[choice];
+            }
+            document.getElementById("answer").style.display = "block";
+            clearAnswer()
         }
+
         console.log(xhr.status.toString() + " " + xhr.responseText)
     }
     xhr.send(data);

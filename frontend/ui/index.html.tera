@@ -1,16 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="ui/style.css" />
     <title>Quiz</title>
-</head>
-<body>
-    <div id="hallo"></div>
-    <div id="current_group"></div> <a href="/login">Gruppe Ändern</a>
+  </head>
+  <body>
+    <header>
+      <div id="currentGroup"></div>
+      <a href="/login">Gruppe Ändern</a>
+    </header>
+    <div id="headings">
+        <h1>{% block question_type %}{% endblock question_type %}</h1>
+        <h2>{{ question }}</h2>
+    </div>
 
-    {% block question_content %}{% endblock question_content %}
-    <script type = "text/javascript" src="ui/index.js"></script>
-</body>
+    <div id="answer" style="display: none">
+      Deine Antwort: <span id="answerContent"></span>
+    </div>
+
+    <div id="answerContainer">{% block answers %}{% endblock answers %}</div>
+
+    <div id="solution" style="display: none">
+      Lösung: {% block solution %}{% endblock solution %}
+    </div>
+
+    <div id="buttonContainer">
+      {% block extra_buttons %} {% endblock extra_buttons %}
+      <button id="buttonSend" class="extraButton" onclick="sendAnswer()" disabled>
+        Antwort Senden
+      </button>
+    </div>
+    <script type="text/javascript" src="ui/index.js"></script>
+  </body>
 </html>

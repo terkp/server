@@ -2,7 +2,7 @@ let letters = ['A', 'B', 'C', 'D']
 
 if (typeof (EventSource) !== "undefined") {
     //create an object, passing it the name and location of the server side script
-    var eSource = new EventSource("http://localhost:8000/events");
+    var eSource = new EventSource("/events");
     //detect message receipt
     eSource.onmessage = function (event) {
         //write the received data to the page

@@ -1,29 +1,30 @@
 {% extends "ui/index" %}
-{% block question_content%}
+
+
+{% block question_type%}
+Sortierfrage
+{% endblock question_type%}
+
+
+{% block answers%}
 <script type = "text/javascript" src="ui/sort.js"></script>
-<h1>Sortierfrage</h1>
 
-<h2>{{ question }}</h2>
+<button id="buttonA" class="answerButton" onclick="addAnswer(0)">A: {{ answers[0] }}</button><br>
+<button id="buttonB" class="answerButton" onclick="addAnswer(1)">B: {{ answers[1] }}</button><br>
+<button id="buttonC" class="answerButton" onclick="addAnswer(2)">C: {{ answers[2] }}</button><br>
+<button id="buttonD" class="answerButton" onclick="addAnswer(3)">D: {{ answers[3] }}</button><br>
+
+<div id="currentAnswer" class="largeText"></div>
+{% endblock answers%}
 
 
-<div id="answer" style="display: none;">
-Deine Antwort: <span id="answer_content"></span>
-</div>
-
-<button id="buttonA" onclick="addAnswer(0)">A: {{ answers[0] }}</button><br>
-<button id="buttonB" onclick="addAnswer(1)">B: {{ answers[1] }}</button><br>
-<button id="buttonC" onclick="addAnswer(2)">C: {{ answers[2] }}</button><br>
-<button id="buttonD" onclick="addAnswer(3)">D: {{ answers[3] }}</button><br>
-<br>
-<button id="buttonClear" onclick="clearAnswer()">Antwort Löschen</button><br>
-<button id="buttonSend" onclick="sendAnswer()">Antwort Senden</button><br>
-
-<div id="solution" style="display: none;">
-Lösung: 
+{% block solution %}
 {{ letters[solution[0]] }}
 {{ letters[solution[1]] }}
 {{ letters[solution[2]] }}
 {{ letters[solution[3]] }}
-</div>
+{% endblock solution %}
 
-{% endblock question_content%}
+{% block extra_buttons %}
+<button id="buttonClear" class="extraButton" onclick="clearAnswer()">Löschen</button>
+{% endblock extra_buttons%}
