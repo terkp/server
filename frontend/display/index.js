@@ -15,8 +15,8 @@ if (typeof EventSource !== "undefined") {
       document.getElementById("solution").style.display = "block";
     } else if (event.data === "show_answers") {
       editCSS.innerHTML = ".groupAnswerText {display: block;}";
-    } else if (event.data === "show_score") {
-      window.location.href = "/display/score";
+    } else if (event.data === "toggle_leaderboard") {
+      window.location.href = "/display/leaderboard";
     } else if (event.data === "groups") {
       updateGroups();
     } else {

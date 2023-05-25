@@ -12,8 +12,8 @@ struct GroupScore {
     score: isize,
 }
 
-#[get("/score")]
-pub async fn show_score(server_data: &State<ServerData>) -> Template {
+#[get("/leaderboard")]
+pub async fn show_leaderboard(server_data: &State<ServerData>) -> Template {
     let groups = server_data
         .groups
         .iter()

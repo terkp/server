@@ -6,7 +6,7 @@ if (typeof EventSource !== "undefined") {
   //detect message receipt
   eSource.onmessage = function (event) {
     //write the received data to the page
-    if (event.data === "show_score") {
+    if (event.data === "toggle_leaderboard") {
       window.location.href = "/display";
     }
   };

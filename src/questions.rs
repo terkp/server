@@ -97,6 +97,7 @@ pub async fn next_question(server_data: &State<ServerData>) -> Redirect {
     send_event(server_data, UpdateEvent::UpdateQuestions).await;
     Redirect::to(uri!("/questions", current_question()))
 }
+
 #[post("/set", format = "text/plain", data = "<question_num>")]
 pub async fn set_question(server_data: &State<ServerData>, question_num: String) -> Status {
     match question_num.parse::<usize>() {
@@ -120,6 +121,8 @@ pub async fn results(server_data: &State<ServerData>) -> Result<(), String> {
     if let Err(e) = server_data.results().await {
         return Err(e.to_string());
     }
+    server_data.question_state.show_solution();
+    send_event(server_data, UpdateEvent::UpdateGroups).await;
     send_event(server_data, UpdateEvent::ShowSolution).await;
     Ok(())
 }
@@ -144,8 +147,3 @@ pub async fn show_points(server_data: &State<ServerData>) -> Status {
     Status::Ok
 }
 
-#[get("/show_score")]
-pub async fn show_score(server_data: &State<ServerData>) -> Status {
-    send_event(server_data, UpdateEvent::ShowScore).await;
-    Status::Ok
-}

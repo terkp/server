@@ -484,7 +484,7 @@ pub enum UpdateEvent {
     /// Shows the solution to the current question
     ShowSolution,
     ShowPoints,
-    ShowScore,
+    ToggleLeaderboard,
 }
 
 impl Display for UpdateEvent {
@@ -499,7 +499,7 @@ impl Display for UpdateEvent {
                 ShowAnswers => "show_answers",
                 ShowSolution => "show_solution",
                 ShowPoints => "show_points",
-                ShowScore => "show_score",
+                ToggleLeaderboard => "toggle_leaderboard",
             }
         )
     }

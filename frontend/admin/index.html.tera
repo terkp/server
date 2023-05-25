@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="admin/style.css" />
+    <title>Admin Panel</title>
+    <script type="text/javascript" src="admin/index.js" defer></script>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Control Panel</h1>
+      <table style="width: 100%">
+        <tr>
+          <th>Option</th>
+          <th>Input</th>
+        </tr>
+        <tr>
+          <th class="subheading">Fragen</th>
+        </tr>
+        <tr>
+          <td><span class="optionTitle">Fragen Laden:</span></td>
+          <td><input type="file" accept=".txt" id="questionFilePicker" /></td>
+          <td><button onclick="loadQuestions()">Fragen Laden</button></td>
+        </tr>
+        <tr>
+          <td><span class="optionTitle">Nächste Frage:</span></td>
+          <td></td>
+          <td><button onclick="nextQuestion()">Nächste Frage</button></td>
+        </tr>
+        <tr>
+          <td><span class="optionTitle">Gehe zu Frage:</span></td>
+          <td><input type="number" id="questionPicker" /></td>
+          <td><button onclick="goToQuestion()">Gehe zu Frage</button></td>
+        </tr>
+        <tr>
+          <td><span class="optionTitle">Ergebnisse eintragen:</span></td>
+          <td></td>
+          <td><button onclick="getResults()">Ergebnisse Eintragen</button></td>
+        </tr>
+        <tr>
+          <td><span class="optionTitle">Antworten anzeigen:</span></td>
+          <td></td>
+          <td><button onclick="showAnswers()">Antworten anzeigen</button></td>
+        </tr>
+        <tr>
+          <td>
+            <span class="optionTitle">Lösung anzeigen (ohne Eintragen):</span>
+          </td>
+          <td></td>
+          <td><button onclick="showSolution()">Lösung Anzeigen</button></td>
+        </tr>
+        <tr>
+          <th class="subheading">Punktzahl</th>
+        </tr>
+        <tr>
+          <td><span class="optionTitle">Punktzahl setzen:</span></td>
+          <td>
+            <input type="text" placeholder="Gruppenname" id="groupNameInput" />
+            <input type="number" placeholder="Punktzahl" id="groupScoreInput" />
+          </td>
+          <td>
+            <button onclick="setScore()">Punktzahl setzen</button>
+          </td>
+        </tr>
+        <tr>
+          <td><span class="optionTitle">Punktzahl addieren:</span></td>
+          <td></td>
+          <td>
+            <button onclick="addScore()">Punktestand addieren</button>
+          </td>
+        </tr>
+        <tr>
+          <th class="subheading">Display</th>
+        </tr>
+        <tr>
+          <td><span class="optionTitle">Punktestand anzeigen:</span></td>
+          <td></td>
+          <td>
+            <button onclick="toggleLeaderboard()">Punktestand anzeigen</button>
+          </td>
+        </tr>
+        <tr>
+          <th class="subheading">Gruppen</th>
+        </tr>
+        <tr>
+          <td><span class="optionTitle">Gruppe Löschen:</span></td>
+          <td>
+            <input
+              type="text"
+              placeholder="Gruppenname"
+              id="groupNameInputDelete"
+            />
+          </td>
+          <td>
+            <button onclick="deleteGroup()">Gruppe Löschen</button>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <div class="container">
+      <h1>Frage</h1>
+      <table id="currentQuestion"></table>
+      <hr />
+      <table id="questionState"></table>
+    </div>
+    <div class="container">
+        <h1>Gruppen</h1>
+      <table id="groups"></table>
+    </div>
+  </body>
+</html>

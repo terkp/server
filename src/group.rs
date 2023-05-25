@@ -37,12 +37,29 @@ pub struct ScoreData {
     score: isize,
 }
 
-#[post("/set_points", format = "application/json", data = "<point_data>")]
-pub async fn set_points(
+#[post("/set_score", format = "application/json", data = "<point_data>")]
+pub async fn set_score(
     server_data: &State<ServerData>,
     point_data: Json<ScoreData>,
 ) -> (Status, String) {
     if let Err(e) = server_data.set_group_points(point_data.group_name.clone(), point_data.score) {
+        return (Status::UnprocessableEntity, e.to_string());
+    };
+    (
+        Status::Ok,
+        format!(
+            "set points for group '{}' to '{}'",
+            point_data.group_name, point_data.score
+        ),
+    )
+}
+
+#[post("/add_score", format = "application/json", data = "<point_data>")]
+pub async fn add_score(
+    server_data: &State<ServerData>,
+    point_data: Json<ScoreData>,
+) -> (Status, String) {
+    if let Err(e) = server_data.add_group_points(point_data.group_name.clone(), point_data.score) {
         return (Status::UnprocessableEntity, e.to_string());
     };
     (

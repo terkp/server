@@ -13,6 +13,7 @@ use rocket::{
     Request, Response, Shutdown, State,
 };
 use rocket_dyn_templates::{context, Template};
+use server_data::{UpdateEvent, send_event};
 use simplelog::{ConfigBuilder, TermLogger};
 
 use crate::server_data::{EventBuffer, Question, ServerData, EVENT_BUFFER_KEY_LENGTH};
@@ -106,16 +107,17 @@ pub async fn events(
 
 #[launch]
 fn rocket() -> _ {
-    setup_logger();
+    //setup_logger();
     rocket::build()
         .manage(server_data::ServerData::default())
-        .mount("/", routes![files, events, show_ui, show_login, cors_fix])
+        .mount("/", routes![files, events, show_ui, show_login, cors_fix, show_admin, toggle_leaderboard])
         .mount(
             "/groups/",
             routes![
                 group::new_group,
                 group::get_all_groups,
-                group::set_points,
+                group::set_score,
+                group::add_score,
                 group::set_answer,
                 group::del_group
             ],
@@ -131,26 +133,28 @@ fn rocket() -> _ {
                 questions::show_answers,
                 questions::show_points,
                 questions::show_solution,
-                questions::show_score,
                 questions::set_question
             ],
         )
         .mount(
             "/display",
-            routes![display::show_display, display::show_score],
+            routes![display::show_display, display::show_leaderboard],
         )
         .attach(Template::fairing())
         .attach(CORS)
 }
 
+#[get("/admin_endpoint_sehr_billig")]
+pub async fn show_admin() -> Template {
+    Template::render("admin/index", context! {})
+}
+
+
 #[get("/")]
 pub async fn show_ui(server_data: &State<ServerData>) -> Template {
     let questions = &server_data.questions.lock().await;
     if questions.is_empty() {
-        return Template::render(
-            "ui/waiting",
-            context! { question: "" },
-        );
+        return Template::render("ui/waiting", context! { question: "" });
     }
     let question = &questions[server_data.current_question.load(Ordering::Relaxed)];
 
@@ -198,4 +202,10 @@ pub async fn show_ui(server_data: &State<ServerData>) -> Template {
 #[get("/login")]
 pub async fn show_login() -> Template {
     Template::render("ui/login", context! {})
+}
+
+#[get("/toggle_leaderboard")]
+pub async fn toggle_leaderboard(server_data: &State<ServerData>) -> Status {
+    send_event(server_data, UpdateEvent::ToggleLeaderboard).await;
+    Status::Ok
 }
