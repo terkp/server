@@ -7,6 +7,7 @@ html, body {
   background-repeat: no-repeat;
   background-size: cover;
   height: 100%;
+  overflow: hidden;
 }
 
 .answer {
@@ -14,8 +15,15 @@ html, body {
   padding: 20px;
   text-align: center;
   border: 1px solid #ddd;
-  font-size: large;
+  font-size: x-large;
   border-radius: 1em;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 #solution {
@@ -24,7 +32,6 @@ html, body {
 }
 
 .container {
-  padding: 20px;
   width: 100%;
   min-height: 100vh;
   display: flex;

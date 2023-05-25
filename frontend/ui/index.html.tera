@@ -8,30 +8,37 @@
     <title>Quiz</title>
   </head>
   <body>
-    <header>
-      <div id="currentGroup"></div>
-      <a href="/login">Gruppe Ändern</a>
-    </header>
-    <div id="headings">
+    <div id="root">
+      <header>
+        <div id="currentGroup"></div>
+        <a href="/login">Gruppe Ändern</a>
+      </header>
+      <div id="headings">
         <h1>{% block question_type %}{% endblock question_type %}</h1>
         <h2>{{ question }}</h2>
-    </div>
+      </div>
 
-    <div id="answer" style="display: none">
-      Deine Antwort: <span id="answerContent"></span>
-    </div>
+      <div id="answer" style="display: none">
+        Deine Antwort: <span id="answerContent"></span>
+      </div>
 
-    <div id="answerContainer">{% block answers %}{% endblock answers %}</div>
+      <div id="answerContainer">{% block answers %}{% endblock answers %}</div>
 
-    <div id="solution" style="display: none">
-      Lösung: {% block solution %}{% endblock solution %}
-    </div>
+      <div id="solution" style="display: none">
+        Lösung: {% block solution %}{% endblock solution %}
+      </div>
 
-    <div id="buttonContainer">
-      {% block extra_buttons %} {% endblock extra_buttons %}
-      <button id="buttonSend" class="extraButton" onclick="sendAnswer()" disabled>
-        Antwort Senden
-      </button>
+      <div id="buttonContainer">
+        {% block extra_buttons %} {% endblock extra_buttons %}
+        <button
+          id="buttonSend"
+          class="extraButton"
+          onclick="sendAnswer()"
+          disabled
+        >
+          Antwort Senden
+        </button>
+      </div>
     </div>
     <script type="text/javascript" src="ui/index.js"></script>
   </body>

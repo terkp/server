@@ -1,9 +1,9 @@
 use crate::server_data::{
-    self, send_event, Answer, GroupData, Question, QuestionState, ServerData, UpdateEvent,
+    send_event, Answer, Question, QuestionState, ServerData, UpdateEvent,
 };
-use log::debug;
+
 use rocket::{
-    http::{hyper::server, Status},
+    http::Status,
     response::Redirect,
     serde::json::Json,
     State,
@@ -103,6 +103,7 @@ pub async fn set_question(server_data: &State<ServerData>, question_num: String)
         Ok(value) => {
             server_data.current_question.store(value, Ordering::Relaxed);
             server_data.block_answer.store(false, Ordering::SeqCst);
+            server_data.question_state.reset();
             server_data.clear_group_answers().await;
             send_event(server_data, UpdateEvent::UpdateQuestions).await;
             Status::Ok
