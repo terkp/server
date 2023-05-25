@@ -148,8 +148,8 @@ pub async fn show_ui(server_data: &State<ServerData>) -> Template {
     let questions = &server_data.questions.lock().await;
     if questions.is_empty() {
         return Template::render(
-            "ui/estimate",
-            context! { question: "Keine Frage Gefunden", solution: 0.0 },
+            "ui/waiting",
+            context! { question: "" },
         );
     }
     let question = &questions[server_data.current_question.load(Ordering::Relaxed)];

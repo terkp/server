@@ -35,7 +35,7 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
     let questions = &server_data.questions.lock().await;
     if questions.is_empty() {
         return Template::render(
-            "display/estimate",
+            "display/waiting",
             context! { question: "Keine Frage Gefunden", solution: 0.0 },
         );
     }

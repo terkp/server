@@ -1,0 +1,15 @@
+{% extends "ui/index" %}
+
+{% block question_type %}
+Bitte Warten...
+{% endblock question_type %}
+
+
+{% block answers %}
+<script type="text/javascript" src="ui/waiting.js" defer></script>
+{% endblock answers %}
+
+
+{% block solution %}
+{% endblock solution %}
+
