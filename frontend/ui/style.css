@@ -42,11 +42,11 @@ header {
 }
 
 h1 {
-  font-size: xxx-large;
+  font-size: 6vmin;
 }
 
 h2 {
-  font-size: x-large;
+  font-size: 4vmin;
 }
 
 h1,
@@ -78,13 +78,13 @@ h2 {
 
 .answerButton {
   background-color: #f9f9f999;
-  padding: 20px;
+  padding: 10px;
   text-align: center;
   border: 1px solid #ddd;
-  border-radius: 1em;
+  border-radius: 0.75em;
   margin: 0.5em 1em;
   width: 100%;
-  font-size: larger;
+  font-size: 3vmin;
 }
 
 #loginContent {

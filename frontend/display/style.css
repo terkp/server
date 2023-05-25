@@ -20,10 +20,25 @@ html, body {
 }
 
 #root {
+    display: flex;
+    flex-direction: row;
+}
+
+#root > #group_answers {
+    flex-shrink: 0;
+}
+
+#root > #answerContent {
+    flex-grow: 1;
+}
+
+#answerContent {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  padding: 1em;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
 }
 
 #solution {
@@ -39,7 +54,6 @@ html, body {
   justify-content: flex-start;
   align-items: center;
   text-align: center;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
   overflow: visible;
 }
 
@@ -52,23 +66,22 @@ html, body {
 }
 
 h1 {
-  font-size: 48px;
+  font-size: 6vmin;
   margin-bottom: 20px;
 }
 
 h2 {
-  font-size: 36px;
+  font-size: 4vmin;
   margin-bottom: 20px;
 }
 
 #group_answers {
-  position: absolute;
   top: 0%;
   left: 0%;
-  width: 10%;
+  max-width: 30%;
   height: 100%;
   margin: 0.5em;
-  font-size: larger;
+  font-size: 3vmin;
 }
 
 #groupScores {

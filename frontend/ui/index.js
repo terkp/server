@@ -57,8 +57,7 @@ if (typeof EventSource !== "undefined") {
     }
   };
 } else {
-  document.getElementById("hallo").innerHTML =
-    "Whoops! Your browser doesn't receive server-sent events.";
+  alert("Whoops! Your browser doesn't receive server-sent events.");
 }
 /*
 1. Anzeige öffnen 
