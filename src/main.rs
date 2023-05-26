@@ -63,6 +63,7 @@ impl Fairing for CORS {
     }
 }
 
+#[allow(unused)]
 fn setup_logger() {
     let cfg = ConfigBuilder::new()
         .add_filter_allow_str("server")

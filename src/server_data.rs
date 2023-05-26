@@ -1,6 +1,6 @@
 #![allow(clippy::result_large_err)]
 
-use crossbeam::{atomic::AtomicConsume, queue::ArrayQueue};
+use crossbeam::queue::ArrayQueue;
 use dashmap::{mapref::entry::Entry, DashMap};
 use log::{info, warn};
 use rocket::{
