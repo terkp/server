@@ -1,4 +1,5 @@
 use std::{
+    ops::Deref,
     path::{Path, PathBuf},
     sync::{atomic::Ordering, Arc},
 };
@@ -13,7 +14,7 @@ use rocket::{
     Request, Response, Shutdown, State,
 };
 use rocket_dyn_templates::{context, Template};
-use server_data::{UpdateEvent, send_event};
+use server_data::{send_event, UpdateEvent};
 use simplelog::{ConfigBuilder, TermLogger};
 
 use crate::server_data::{EventBuffer, Question, ServerData, EVENT_BUFFER_KEY_LENGTH};
@@ -77,6 +78,23 @@ fn setup_logger() {
     .unwrap();
 }
 
+/// Wrapper around an event buffer that automatically disconects it once it goes out of scope
+struct BufferHandle(Arc<EventBuffer>);
+
+impl Deref for BufferHandle {
+    type Target = Arc<EventBuffer>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Drop for BufferHandle {
+    fn drop(&mut self) {
+        self.0.disconnect();
+    }
+}
+
 #[get("/events")]
 pub async fn events(
     server_data: &State<ServerData>,
@@ -92,6 +110,7 @@ pub async fn events(
         .client_event_buffers
         .insert(key.clone(), Arc::clone(&buffer));
     debug!("Added event buffer with id \"{key}\"");
+    let buffer = BufferHandle(buffer);
 
     EventStream! {
         loop {
@@ -110,7 +129,18 @@ fn rocket() -> _ {
     //setup_logger();
     rocket::build()
         .manage(server_data::ServerData::default())
-        .mount("/", routes![files, events, show_ui, show_login, cors_fix, show_admin, toggle_leaderboard])
+        .mount(
+            "/",
+            routes![
+                files,
+                events,
+                show_ui,
+                show_login,
+                cors_fix,
+                show_admin,
+                toggle_leaderboard
+            ],
+        )
         .mount(
             "/groups/",
             routes![
@@ -148,7 +178,6 @@ fn rocket() -> _ {
 pub async fn show_admin() -> Template {
     Template::render("admin/index", context! {})
 }
-
 
 #[get("/")]
 pub async fn show_ui(server_data: &State<ServerData>) -> Template {

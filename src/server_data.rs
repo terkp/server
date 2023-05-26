@@ -218,8 +218,11 @@ impl ServerData {
     }
 }
 
+/// A buffer holding events to be asynchronously progressed.
+/// Attributes are a queue to hold the events,
+/// a semaphore to gate access to the queue, and a boolean determining whether this buffer is disconnected or not.
 #[derive(Debug)]
-pub struct EventBuffer(ArrayQueue<Event>, Semaphore);
+pub struct EventBuffer(ArrayQueue<Event>, Semaphore, AtomicBool);
 
 impl EventBuffer {
     pub fn new() -> Self {
@@ -228,7 +231,11 @@ impl EventBuffer {
 
     pub fn with_capacity(cap: usize) -> Self {
         log::info!("Created event queue with capacity {cap}");
-        Self(ArrayQueue::new(cap), Semaphore::new(0))
+        Self(
+            ArrayQueue::new(cap),
+            Semaphore::new(0),
+            AtomicBool::new(false),
+        )
     }
 
     pub fn push(&self, event: Event) -> Result<(), Event> {
@@ -246,6 +253,14 @@ impl EventBuffer {
             self.0.len() - 1
         );
         self.0.pop().unwrap()
+    }
+
+    pub fn disconnect(&self) {
+        self.2.store(true, Ordering::Relaxed)
+    }
+
+    pub fn is_disconnected(&self) -> bool {
+        self.2.load(Ordering::Relaxed)
     }
 }
 
@@ -508,6 +523,10 @@ impl Display for UpdateEvent {
 pub async fn send_event(server_data: &State<ServerData>, event: UpdateEvent) {
     info!("sending event with text: {event}");
 
+    // Delete event buffers that are disconnected
+    server_data
+        .client_event_buffers
+        .retain(|_, buf| !buf.is_disconnected());
     // The buffers we want to delete since they don't seem to be connected anymore
     let mut to_delete = vec![];
     // Write the event into every event buffer available

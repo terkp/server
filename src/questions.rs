@@ -1,13 +1,6 @@
-use crate::server_data::{
-    send_event, Answer, Question, QuestionState, ServerData, UpdateEvent,
-};
+use crate::server_data::{send_event, Answer, Question, QuestionState, ServerData, UpdateEvent};
 
-use rocket::{
-    http::Status,
-    response::Redirect,
-    serde::json::Json,
-    State,
-};
+use rocket::{http::Status, response::Redirect, serde::json::Json, State};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::Ordering;
 
@@ -146,4 +139,3 @@ pub async fn show_points(server_data: &State<ServerData>) -> Status {
     send_event(server_data, UpdateEvent::ShowPoints).await;
     Status::Ok
 }
-
