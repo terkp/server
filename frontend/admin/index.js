@@ -71,7 +71,7 @@ function updateQuestion() {
         questionElem.innerHTML = "<tr><th>Frage:</b></tr><tr>Keine</tr>";
         return;
       }
-      questionElem.innerHTML = "";
+      questionElem.innerHTML = `<tr><td>Nummer</td><td>${data[0]}</td></tr>`;
       for (const [type, questionData] of Object.entries(data[1])) {
         questionElem.innerHTML += `<tr><td>Typ</td><td>${type}</td></tr>`;
         questionElem.innerHTML += `<tr><td>Frage</td><td>${JSON.stringify(
