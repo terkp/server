@@ -12,7 +12,7 @@
     <div class="answer">D: {{ answers[3] }}</div>
   </div>
 
-  <div id="solution" class="answer" style="display: none">
+  <div id="solution" style="display: none">
     Lösung:
     {{ letters[solution[0]] }}
     {{ letters[solution[1]] }}

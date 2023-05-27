@@ -4,7 +4,7 @@
   <h1>Schätzfrage</h1>
 
   <h2>{{ question }}</h2>
-  <div id="solution" class="answer">Lösung: {{ solution }}</div>
+  <div id="solution">Lösung: {{ solution }}</div>
 </div>
 
 {% endblock answers%}

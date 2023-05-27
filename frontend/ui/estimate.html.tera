@@ -8,7 +8,7 @@ Schätzfrage
 {% block answers%}
 <script type = "text/javascript" src="ui/estimate.js"></script>
 
-<input type="number" id="answerInput" onchange="setAnswer()"/>
+<input type="number" id="answerInput" placeholder="Antwort eingeben" onchange="setAnswer()"/>
 {% endblock answers%}
 
 

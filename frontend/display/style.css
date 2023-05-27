@@ -1,8 +1,10 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&display=swap");
-
-html, body {
-  font-family: "DM Sans";
-  background-image: url("../res/bg.png");
+/*
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&display=swap');
+*/
+html,
+body {
+  font-family: 'sans-serif';
+  background-image: url('../res/bg.png');
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -15,21 +17,22 @@ html, body {
   padding: 20px;
   text-align: center;
   border: 1px solid #ddd;
-  font-size: x-large;
+  font-size: 2vmax;
   border-radius: 1em;
+  font-weight: bold;
 }
 
 #root {
-    display: flex;
-    flex-direction: row;
+  display: flex;
+  flex-direction: row;
 }
 
 #root > #group_answers {
-    flex-shrink: 0;
+  flex-shrink: 0;
 }
 
 #root > #answerContent {
-    flex-grow: 1;
+  flex-grow: 1;
 }
 
 #answerContent {
@@ -39,11 +42,15 @@ html, body {
   text-align: center;
   padding: 1em;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+  padding: 3vmax;
 }
 
 #solution {
   margin-top: 20px;
   display: none;
+  font-size: 2vmax;
+  font-weight: bold;
+  padding: 0.5em;
 }
 
 .container {
@@ -60,9 +67,10 @@ html, body {
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-column-gap: 600px;
-  grid-row-gap: 40px;
+  grid-column-gap: 400px;
+  grid-row-gap: 2em;
   margin-top: 20px;
+  margin-bottom: 1.5em;
 }
 
 h1 {
@@ -72,7 +80,7 @@ h1 {
 
 h2 {
   font-size: 4vmin;
-  margin-bottom: 20px;
+  margin-bottom: 1em;
 }
 
 #group_answers {
@@ -85,24 +93,24 @@ h2 {
 }
 
 #groupScores {
-    font-size: x-large;
-    margin: 2em;
+  font-size: x-large;
+  margin: 2em;
 }
 
 .groupScore {
-    margin-bottom: 0.2em;
+  margin-bottom: 0.2em;
 }
 
 .groupName {
-    font-weight: bold;
+  font-weight: bold;
 }
 
 .groupAnswerText {
-    margin-left: 0.5em;
-    display: none;
+  margin-left: 0.5em;
+  display: none;
 }
 
 .groupAnswer {
-    display: flex;
-    padding: 0.1em;
+  display: flex;
+  padding: 0.1em;
 }
