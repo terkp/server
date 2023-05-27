@@ -175,7 +175,7 @@ fn rocket() -> _ {
         .attach(CORS)
 }
 
-#[get("/admin_endpoint_sehr_billig")]
+#[get("/admin_billig")]
 pub async fn show_admin() -> Template {
     Template::render("admin/index", context! {})
 }

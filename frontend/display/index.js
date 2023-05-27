@@ -77,7 +77,7 @@ function updateGroups() {
   xhr.onload = (e) => {
     answersElement.innerHTML = "";
     let answers = JSON.parse(xhr.responseText);
-    for (const [groupName, answer] of Object.entries(answers).sort()) {
+    for (let [groupName, answer] of Object.entries(answers).sort()) {
       if (groupName.length > 20) {
         groupName = groupName.substring(0, 18) + "...";
       }
