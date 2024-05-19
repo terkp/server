@@ -1,18 +1,18 @@
 normal#Wie lange existiert das Pfingsten Quiz(wahrscheinlich)#100 jahre#Gerade ersten seit eben#Es existiert nicht#10 Jahre#d
-normal#Wie wird die erst 1993 wissenschaftlich  beschiebene Saola auch genannt?#Amerikanhischer Kobalt#Europäischer Greif#Afrikanischer Drache#Asiatisches Einhorn#d
-sortier#Sortiere diese Brettspiele aufsteigend nach ihrm Veröffentlichungsdatum#Risiko#Sieder von Catan#Monopoly#Halma#d#c#a#b
-schaetzen#Wie lange ist das längste in Lied, das jemals die Nummer 1 der Billboard Charts erreichte  in Sekunden#613
+normal#Wie wird die erste 1993 wissenschaftlich  beschriebene Saola auch genannt?#Amerikanischer Kobalt#Europäischer Greif#Afrikanischer Drache#Asiatisches Einhorn#d
+sortier#Sortiere diese Brettspiele aufsteigend nach ihrem Veröffentlichungsdatum!#Risiko#Siedler von Catan#Monopoly#Halma#d#c#a#b
+normal#Was gehört nicht zu den Rosengewächsen?#Haselstrauch#Erdbeere#Apfel#Edelrose#a
+schaetzen#Wie lange ist das längste Lied, das jemals die Nummer 1 der Billboard Charts(US) erreichte  in Sekunden?#613
 normal#Was ist das Land mit den meisten Zeitzonen?#Frankreich#Russland#Australien#Brasilien#a
-normal#Was ist die Größte Insel im Mittelmeer#Zypern#Malta#Korsika#Sizilien#d
-sortier#Sortiere diese Sportarten aufsteigend nach der Anzahl der Spieler von einem Team die gleichzeitig spielen#American Football#Rugby Union#Handball#Basketball#d#c#a#b
-schaetzen#Wie lange ist die Kinofassung von Der Herr der Ringe: Die Gefährten in Minuten#178
-normal#Was ist das häufigste Haustier Deutschlands#Kannichen#Meerschweinchen#Katze#Hund#c
-schaetzen#Wie viele UN-Mitgliedsstaaten haben hauptsätzlich Linksverkehr#54
-normal#Was beinhaltet das Gericht "lumache alla romana"#Heuschrecken#Grillen#Schnecken#Mehlwürmer#c
+normal#Was ist die größte Insel im Mittelmeer?#Zypern#Malta#Korsika#Sizilien#d
+sortier#Sortiere diese Sportarten aufsteigend nach der Anzahl der Spieler eines Teams die gleichzeitig spielen!#American Football#Rugby Union#Handball#Basketball#d#c#a#b
+schaetzen#Wie lange ist die Kinofassung von "Der Herr der Ringe: Die Gefährten" in Minuten?#178
+normal#Was ist das häufigste Haustier Deutschlands?#Kannichen#Meerschweinchen#Katze#Hund#c
+schaetzen#Wie viele UN-Mitgliedsstaaten haben hauptsächlich Linksverkehr?#54
+normal#Was beinhaltet das Gericht "lumache alla romana"?#Heuschrecken#Grillen#Schnecken#Mehlwürmer#c
 normal#Wie heißt Feuerwehrmann Sam mit Nachnamen?#Morris#Müller#Hooper#Jones#d
-normal#Was kann kein erwachsenes Schnabeltier?#Mit seinen Zähnen beißen#Mit seinen Giftstachel stechen#Eier legen#Den Schnabel biegen#a
-sortier#Sortiere diese Computerspiele aufsteigend nach den Epochen in denen hauptsächlich sie spielen#Europa Universalis 3#Assassin’s Creed Unity#Age of Empires#Hogwarts Legacy#c#a#b#d
+normal#Was kann kein Schnabeltier nach aktuellen wissenschaftlichem Stand?#Töne höher als 300 kHz hören#Mit seinem Giftstachel stechen#Eier legen#Den Schnabel biegen#a
+sortier#Sortiere diese Computerspiele aufsteigend nach den Epochen, in denen sie hauptsächlich spielen!#Europa Universalis 3#Assassin’s Creed Unity#Age of Empires#Hogwarts Legacy#c#a#b#d
 normal#Was ist ein Rogner?#Ein weiblicher Fisch#Ein Bauer#Ein spezielles Brot#Ein kleiner Komet#a
 normal#Was ist eine Erfindung aus dem 19. Jahrhundert?#Lichtmühle#Schallmixer#Magnetofen#Dampfschneidegerät#a
-sortier#Keine Frage, Quiz vorbei,#wirklich vorbei#Frage nur aus#Sicherheitsgründen#Lösung errät ihr nie#c#a#d#b
-normal#Was gehört nicht zu den Rosengewächsen#Haselstrauch#Erdbeere#Apfel#Edelrose#a
+sortier#Keine Frage, Quiz vorbei,#wirklich vorbei#Frage nur aus#Sicherheitsgründen#Lösung erratet ihr nie#c#a#d#b
