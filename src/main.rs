@@ -4,7 +4,7 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric,  Rng};
 use rocket::{
     fairing::{Fairing, Info, Kind},
     fs::NamedFile,
@@ -101,7 +101,7 @@ pub async fn events(
     server_data: &State<ServerData>,
     mut shutdown: Shutdown,
 ) -> EventStream![Event + '_] {
-    let key = rand::thread_rng()
+    let key = rand::rng()
         .sample_iter(&Alphanumeric)
         .take(EVENT_BUFFER_KEY_LENGTH)
         .map(char::from)
