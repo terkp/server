@@ -30,11 +30,11 @@ pub async fn get_all_groups(server_data: &State<ServerData>) -> Json<HashMap<Str
     )
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ScoreData {
     #[serde(alias = "name")]
     group_name: String,
-    score: isize,
+    score: f64,
 }
 
 #[post("/set_score", format = "application/json", data = "<point_data>")]

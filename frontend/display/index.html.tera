@@ -12,6 +12,11 @@
       <div id="group_answers"></div>
       <div id="answerContent">
         {% block answers %}{% endblock answers %}
+        {% if image_path %}
+        <div id="pictureContainer" class="picture-hidden">
+          <img id="questionPicture" src="/{{ image_path }}" alt="Fragebild" />
+        </div>
+        {% endif %}
       </div>
       <script type="text/javascript" src="display/index.js"></script>
     </div>

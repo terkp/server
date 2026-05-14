@@ -18,6 +18,15 @@
         <h2>{{ question }}</h2>
       </div>
 
+      {% if image_before %}
+      <div id="questionImageBefore" class="questionPictureFrame" onclick="togglePictureFullscreen()">
+        <img src="/{{ image_before }}" alt="Fragebild" />
+        <button class="pictureFullscreenButton" type="button" onclick="event.stopPropagation(); togglePictureFullscreen()">
+          Vollbild
+        </button>
+      </div>
+      {% endif %}
+
       <div id="answer" style="display: none">
         Deine Antwort: <span id="answerContent"></span>
       </div>
@@ -26,6 +35,14 @@
 
       <div id="solution" style="display: none">
         Lösung: {% block solution %}{% endblock solution %}
+        {% if image_after %}
+        <div id="questionImageAfter" class="questionPictureFrame" onclick="togglePictureFullscreen()">
+          <img src="/{{ image_after }}" alt="Loesungsbild" />
+          <button class="pictureFullscreenButton" type="button" onclick="event.stopPropagation(); togglePictureFullscreen()">
+            Vollbild
+          </button>
+        </div>
+        {% endif %}
       </div>
 
       <div id="buttonContainer">

@@ -11,6 +11,7 @@ use rocket::{
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
+    path::{Component, Path},
     str::FromStr,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -19,10 +20,12 @@ use std::{
 };
 use thiserror::Error;
 
-const NORMAL_POINTS: isize = 1;
-const SORT_POINTS: isize = 1;
-const ESTIMATE_1_POINTS: isize = 2;
-const ESTIMATE_2_POINTS: isize = 1;
+const NORMAL_POINTS: f64 = 2.0;
+const SORT_POINTS: f64 = 2.0;
+const ESTIMATE_1_POINTS: f64 = 3.0;
+const ESTIMATE_2_POINTS: f64 = 2.0;
+const ESTIMATE_3_POINTS: f64 = 1.0;
+const ASSIGN_POINTS_PER_ITEM: f64 = 0.5;
 
 pub const EVENT_BUFFER_KEY_LENGTH: usize = 32;
 
@@ -30,7 +33,14 @@ const NORMAL_NAME: &str = "normal";
 const ESTIMATE_NAME: &str = "schaetzen";
 const SORT_NAME: &str = "sortier";
 
-const QUESTION_TYPES: [&str; 3] = [NORMAL_NAME, ESTIMATE_NAME, SORT_NAME];
+const ASSIGN_NAME: &str = "zuordnen";
+
+const QUESTION_TYPES: [&str; 4] = [NORMAL_NAME, ESTIMATE_NAME, SORT_NAME, ASSIGN_NAME];
+
+pub const PICTURE_MODE_HIDDEN: usize = 0;
+pub const PICTURE_MODE_INLINE: usize = 1;
+pub const PICTURE_MODE_TOP: usize = 2;
+pub const PICTURE_MODE_FULLSCREEN: usize = 3;
 
 #[derive(Default, Debug)]
 pub struct ServerData {
@@ -50,12 +60,22 @@ pub struct QuestionState {
     answer_is_shown: AtomicBool,
     #[serde(rename = "solutionIsShown")]
     solution_is_shown: AtomicBool,
+    #[serde(rename = "resultsRecorded")]
+    results_recorded: AtomicBool,
+    #[serde(rename = "pictureReleased")]
+    picture_released: AtomicBool,
+    #[serde(rename = "pictureMode")]
+    picture_mode: AtomicUsize,
 }
 
 impl QuestionState {
     pub fn reset(&self) {
         self.answer_is_shown.store(false, Ordering::Relaxed);
         self.solution_is_shown.store(false, Ordering::Relaxed);
+        self.results_recorded.store(false, Ordering::Relaxed);
+        self.picture_released.store(false, Ordering::Relaxed);
+        self.picture_mode
+            .store(PICTURE_MODE_HIDDEN, Ordering::Relaxed);
     }
 
     pub fn show_answers(&self) {
@@ -65,6 +85,43 @@ impl QuestionState {
     pub fn show_solution(&self) {
         self.solution_is_shown.store(true, Ordering::Relaxed)
     }
+
+    pub fn solution_is_shown(&self) -> bool {
+        self.solution_is_shown.load(Ordering::Relaxed)
+    }
+
+    pub fn results_recorded(&self) -> bool {
+        self.results_recorded.load(Ordering::Relaxed)
+    }
+
+    pub fn set_results_recorded(&self, recorded: bool) {
+        self.results_recorded.store(recorded, Ordering::Relaxed);
+    }
+
+    pub fn set_picture_state(&self, released: bool, mode: usize) {
+        self.picture_released.store(released, Ordering::Relaxed);
+        self.picture_mode.store(mode, Ordering::Relaxed);
+    }
+
+    pub fn release_picture(&self) {
+        self.picture_released.store(true, Ordering::Relaxed);
+    }
+
+    pub fn picture_released(&self) -> bool {
+        self.picture_released.load(Ordering::Relaxed)
+    }
+
+    pub fn set_picture_mode(&self, mode: usize) {
+        self.picture_mode.store(mode, Ordering::Relaxed);
+    }
+
+    pub fn picture_mode(&self) -> usize {
+        self.picture_mode.load(Ordering::Relaxed)
+    }
+
+    pub fn answer_is_shown(&self) -> bool {
+        self.answer_is_shown.load(Ordering::Relaxed)
+    }
 }
 
 impl Clone for QuestionState {
@@ -72,6 +129,9 @@ impl Clone for QuestionState {
         Self {
             answer_is_shown: self.answer_is_shown.load(Ordering::Relaxed).into(),
             solution_is_shown: self.solution_is_shown.load(Ordering::Relaxed).into(),
+            results_recorded: self.results_recorded.load(Ordering::Relaxed).into(),
+            picture_released: self.picture_released.load(Ordering::Relaxed).into(),
+            picture_mode: self.picture_mode.load(Ordering::Relaxed).into(),
         }
     }
 }
@@ -105,7 +165,7 @@ impl ServerData {
         }
     }
 
-    pub fn set_group_points(&self, name: impl AsRef<str>, number: isize) -> Result<(), GroupError> {
+    pub fn set_group_points(&self, name: impl AsRef<str>, number: f64) -> Result<(), GroupError> {
         let name = name.as_ref();
         let Some(mut g_data) = self.groups.get_mut(name) else {
             return Err(GroupError::NotFound(name.to_owned()))
@@ -114,7 +174,7 @@ impl ServerData {
         Ok(())
     }
 
-    pub fn add_group_points(&self, name: impl AsRef<str>, number: isize) -> Result<(), GroupError> {
+    pub fn add_group_points(&self, name: impl AsRef<str>, number: f64) -> Result<(), GroupError> {
         let name = name.as_ref();
         let Some(mut g_data) = self.groups.get_mut(name) else {
             return Err(GroupError::NotFound(name.to_owned()))
@@ -142,6 +202,35 @@ impl ServerData {
         })
     }
 
+    pub async fn reset_question_state_for_current_question(&self) {
+        self.question_state.reset();
+        let current_question_idx = self.current_question.load(Ordering::Relaxed);
+        let questions = self.questions.lock().await;
+        let Some(question) = questions.get(current_question_idx) else {
+            return;
+        };
+
+        if !question.has_display_picture() {
+            self.question_state
+                .set_picture_state(false, PICTURE_MODE_HIDDEN);
+            return;
+        }
+
+        if question.display_picture_requires_release() {
+            self.question_state
+                .set_picture_state(false, PICTURE_MODE_HIDDEN);
+            return;
+        }
+
+        if question.display_picture_starts_inline() {
+            self.question_state
+                .set_picture_state(true, PICTURE_MODE_INLINE);
+        } else {
+            self.question_state
+                .set_picture_state(true, PICTURE_MODE_HIDDEN);
+        }
+    }
+
     pub async fn results(&self) -> Result<(), GroupError> {
         let current_question_idx = self.current_question.load(Ordering::Relaxed);
         let Some(question) = self.questions.lock().await.get(current_question_idx).cloned() else {
@@ -159,6 +248,7 @@ impl ServerData {
                     question: _,
                     answers: _,
                     solution,
+                    ..
                 } => match answ {
                     Answer::Normal(ans) => {
                         if solution == ans {
@@ -170,6 +260,7 @@ impl ServerData {
                 Question::Estimate {
                     question: _,
                     solution,
+                    ..
                 } => match answ {
                     Answer::Estimate(ans) => {
                         estimate_list.push(((solution - ans).abs(), entry.key().clone()));
@@ -180,6 +271,7 @@ impl ServerData {
                     question: _,
                     answers: _,
                     solution,
+                    ..
                 } => match answ {
                     Answer::Sort(ans) => {
                         if solution == ans {
@@ -188,30 +280,50 @@ impl ServerData {
                     }
                     _ => continue,
                 },
+                Question::Zuordnen {
+                    question: _,
+                    answers: _,
+                    solution,
+                    ..
+                } => match answ {
+                    Answer::Zuordnen(ans) => {
+                        let mut selected = [false; 6];
+                        for idx in ans {
+                            if *idx < 6 {
+                                selected[*idx] = true;
+                            }
+                        }
+                        let mut score = 0.0;
+                        for i in 0..6 {
+                            if solution[i] == selected[i] {
+                                score += ASSIGN_POINTS_PER_ITEM;
+                            }
+                        }
+                        if score > 0.0 {
+                            entry.add_score(score);
+                        }
+                    }
+                    _ => continue,
+                },
             }
         }
         if !estimate_list.is_empty() {
             estimate_list.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-            let est_g_1 = estimate_list[0].1.clone();
-            self.add_group_points(est_g_1, ESTIMATE_1_POINTS)?;
-            let est_2_points = if estimate_list[0].0 == estimate_list[1].0 {
-                ESTIMATE_1_POINTS
-            } else {
-                ESTIMATE_2_POINTS
-            };
-            let est_g_2 = estimate_list[1].1.clone();
-            self.add_group_points(est_g_2, est_2_points)?;
-            let len_v = estimate_list.len();
-            if len_v > 2 {
-                let mut i: usize = 2;
-                while estimate_list[i].0 == estimate_list[i - 1].0 {
-                    let est_g = estimate_list[i].1.clone();
-                    self.add_group_points(est_g, est_2_points)?;
-                    i += 1;
-                    if len_v <= i {
+            let rank_points = [ESTIMATE_1_POINTS, ESTIMATE_2_POINTS, ESTIMATE_3_POINTS];
+            let mut distinct_rank = 0usize;
+            let mut points_for_rank = rank_points[0];
+
+            for i in 0..estimate_list.len() {
+                if i > 0 && estimate_list[i].0 != estimate_list[i - 1].0 {
+                    distinct_rank += 1;
+                    if distinct_rank >= rank_points.len() {
                         break;
                     }
+                    points_for_rank = rank_points[distinct_rank];
                 }
+
+                let est_group = estimate_list[i].1.clone();
+                self.add_group_points(est_group, points_for_rank)?;
             }
         }
         Ok(())
@@ -272,17 +384,108 @@ impl Default for EventBuffer {
 
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct GroupData {
-    pub score: isize,
+    pub score: f64,
     pub answer: Option<Answer>,
 }
 
 impl GroupData {
-    pub fn add_score(&mut self, points: isize) {
+    pub fn add_score(&mut self, points: f64) {
         self.score += points;
     }
 
-    pub fn set_score(&mut self, score: isize) {
+    pub fn set_score(&mut self, score: f64) {
         self.score = score;
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub enum PictureTiming {
+    SolutionOnly,
+    BeforeAndAfter,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub enum PictureTarget {
+    DisplayOnly,
+    UiAndDisplay,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct PictureMeta {
+    pub path: String,
+    pub timing: PictureTiming,
+    pub target: PictureTarget,
+}
+
+impl PictureMeta {
+    fn from_directive(directive: &str) -> Result<Self, &'static str> {
+        let mut split = directive.trim().splitn(3, ' ');
+        match split.next() {
+            Some("pic") => {}
+            _ => return Err("Invalid picture directive"),
+        }
+
+        let flags = split.next().ok_or("Missing picture flags")?;
+        let mut flag_chars = flags.chars();
+        if flag_chars.next() != Some('-') {
+            return Err("Invalid picture flags");
+        }
+
+        let timing = match flag_chars.next() {
+            Some('s') => PictureTiming::SolutionOnly,
+            Some('b') => PictureTiming::BeforeAndAfter,
+            _ => return Err("Invalid picture timing flag"),
+        };
+
+        let target = match flag_chars.next() {
+            Some('d') => PictureTarget::DisplayOnly,
+            Some('u') => PictureTarget::UiAndDisplay,
+            _ => return Err("Invalid picture target flag"),
+        };
+
+        if flag_chars.next().is_some() {
+            return Err("Invalid picture flags");
+        }
+
+        let raw_path = split.next().ok_or("Missing picture path")?.trim();
+        if raw_path.is_empty() {
+            return Err("Missing picture path");
+        }
+
+        let normalized_path = raw_path.replace('\\', "/");
+        let relative_path = normalized_path.as_str();
+
+        if relative_path.is_empty() {
+            return Err("Picture path missing file name");
+        }
+
+        if relative_path.starts_with('/') {
+            return Err("Invalid picture path");
+        }
+
+        let components = Path::new(relative_path).components();
+
+        let mut has_file_component = false;
+        for component in components {
+            match component {
+                Component::Normal(_) => has_file_component = true,
+                _ => return Err("Invalid picture path"),
+            }
+        }
+
+        if !has_file_component {
+            return Err("Picture path missing file name");
+        }
+
+        Ok(Self {
+            path: format!("pictures/{relative_path}"),
+            timing,
+            target,
+        })
+    }
+
+    fn visible_on_ui(&self) -> bool {
+        matches!(self.target, PictureTarget::UiAndDisplay)
     }
 }
 
@@ -292,20 +495,38 @@ pub enum Question {
         question: String,
         answers: [String; 4],
         solution: usize,
+        picture: Option<PictureMeta>,
     },
     Estimate {
         question: String,
         solution: f64,
+        picture: Option<PictureMeta>,
     },
     Sort {
         question: String,
         answers: [String; 4],
         solution: [usize; 4],
+        picture: Option<PictureMeta>,
+    },
+    Zuordnen {
+        question: String,
+        answers: [String; 6],
+        solution: [bool; 6],
+        picture: Option<PictureMeta>,
     },
 }
 
 impl Question {
     pub fn normal(question: &str, answers: &[String], solution: usize) -> Self {
+        Self::normal_with_picture(question, answers, solution, None)
+    }
+
+    pub fn normal_with_picture(
+        question: &str,
+        answers: &[String],
+        solution: usize,
+        picture: Option<PictureMeta>,
+    ) -> Self {
         if answers.len() != 4 {
             panic!("Wrong amount of answers")
         }
@@ -318,17 +539,36 @@ impl Question {
                 answers[3].clone(),
             ],
             solution,
+            picture,
         }
     }
 
     pub fn estimate(question: &str, solution: f64) -> Self {
+        Self::estimate_with_picture(question, solution, None)
+    }
+
+    pub fn estimate_with_picture(
+        question: &str,
+        solution: f64,
+        picture: Option<PictureMeta>,
+    ) -> Self {
         Question::Estimate {
             question: question.to_owned(),
             solution,
+            picture,
         }
     }
 
     pub fn sort(question: &str, answers: &[String], solution: &[usize]) -> Self {
+        Self::sort_with_picture(question, answers, solution, None)
+    }
+
+    pub fn sort_with_picture(
+        question: &str,
+        answers: &[String],
+        solution: &[usize],
+        picture: Option<PictureMeta>,
+    ) -> Self {
         if answers.len() != 4 {
             panic!("Wrong amount of answers")
         }
@@ -344,7 +584,109 @@ impl Question {
                 answers[3].clone(),
             ],
             solution: [solution[0], solution[1], solution[2], solution[3]],
+            picture,
         }
+    }
+
+    pub fn zuordnen_with_picture(
+        question: &str,
+        answers: &[String],
+        solution: [bool; 6],
+        picture: Option<PictureMeta>,
+    ) -> Self {
+        if answers.len() != 6 {
+            panic!("Wrong amount of answers")
+        }
+        Question::Zuordnen {
+            question: question.to_owned(),
+            answers: [
+                answers[0].clone(),
+                answers[1].clone(),
+                answers[2].clone(),
+                answers[3].clone(),
+                answers[4].clone(),
+                answers[5].clone(),
+            ],
+            solution,
+            picture,
+        }
+    }
+
+    fn picture(&self) -> Option<&PictureMeta> {
+        match self {
+            Question::Normal { picture, .. }
+            | Question::Estimate { picture, .. }
+            | Question::Sort { picture, .. }
+            | Question::Zuordnen { picture, .. } => picture.as_ref(),
+        }
+    }
+
+    pub fn has_display_picture(&self) -> bool {
+        self.picture().is_some()
+    }
+
+    pub fn display_picture_requires_release(&self) -> bool {
+        let Some(picture) = self.picture() else {
+            return false;
+        };
+        matches!(picture.timing, PictureTiming::SolutionOnly)
+    }
+
+    pub fn display_picture_starts_inline(&self) -> bool {
+        let Some(picture) = self.picture() else {
+            return false;
+        };
+        matches!(self, Question::Estimate { .. })
+            && matches!(picture.timing, PictureTiming::BeforeAndAfter)
+    }
+
+    pub fn display_picture_path(&self) -> Option<&str> {
+        self.picture().map(|picture| picture.path.as_str())
+    }
+
+    pub fn display_image_before(&self) -> Option<&str> {
+        let picture = self.picture()?;
+        if !matches!(self, Question::Estimate { .. })
+            || !matches!(picture.timing, PictureTiming::BeforeAndAfter)
+        {
+            return None;
+        }
+        Some(picture.path.as_str())
+    }
+
+    pub fn display_image_after(&self) -> Option<&str> {
+        let picture = self.picture()?;
+        if !matches!(
+            picture.timing,
+            PictureTiming::SolutionOnly | PictureTiming::BeforeAndAfter
+        ) {
+            return None;
+        }
+        Some(picture.path.as_str())
+    }
+
+    pub fn ui_image_before(&self) -> Option<&str> {
+        let picture = self.picture()?;
+        if !picture.visible_on_ui() || !matches!(picture.timing, PictureTiming::BeforeAndAfter) {
+            return None;
+        }
+        Some(picture.path.as_str())
+    }
+
+    pub fn ui_image_after(&self) -> Option<&str> {
+        let picture = self.picture()?;
+        if matches!(picture.timing, PictureTiming::SolutionOnly) {
+            return None;
+        }
+        if !picture.visible_on_ui()
+            || !matches!(
+                picture.timing,
+                PictureTiming::SolutionOnly | PictureTiming::BeforeAndAfter
+            )
+        {
+            return None;
+        }
+        Some(picture.path.as_str())
     }
 }
 
@@ -352,86 +694,150 @@ impl FromStr for Question {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut split = s.split('#');
+        fn parse_solution_letter_4(s: &str) -> Result<usize, &'static str> {
+            let letter = s.trim().to_ascii_lowercase();
+            match letter.as_str() {
+                "a" => Ok(0),
+                "b" => Ok(1),
+                "c" => Ok(2),
+                "d" => Ok(3),
+                _ => Err("Invalid solution"),
+            }
+        }
 
-        let question_type = match split.next() {
-            Some(val) if QUESTION_TYPES.contains(&val) => val,
+        fn parse_solution_letter_6(letter: char) -> Result<usize, &'static str> {
+            match letter.to_ascii_lowercase() {
+                'a' => Ok(0),
+                'b' => Ok(1),
+                'c' => Ok(2),
+                'd' => Ok(3),
+                'e' => Ok(4),
+                'f' => Ok(5),
+                _ => Err("Invalid solution"),
+            }
+        }
+
+        let mut split = s.split('#').collect::<Vec<_>>();
+        if split.is_empty() {
+            return Err("No question type found");
+        }
+
+        let picture = if let Some(last_segment) = split.last() {
+            if last_segment.trim().starts_with("pic ") {
+                let directive = split.pop().ok_or("Invalid picture directive")?;
+                Some(PictureMeta::from_directive(directive.trim())?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let question_type = match split.first() {
+            Some(val) if QUESTION_TYPES.contains(val) => *val,
             None | Some(_) => return Err("No question type found"),
         };
 
-        let question = match split.next() {
-            Some(val) => val,
-            None => return Err("No question text found"),
-        };
+        let question = split.get(1).copied().ok_or("No question text found")?;
 
         match question_type {
             NORMAL_NAME => {
-                let mut answers: [String; 4] = Default::default();
-                for answer in answers.iter_mut() {
-                    *answer = match split.next() {
-                        Some(val) => val.to_owned(),
-                        None => return Err("Answer not found"),
-                    }
+                if split.len() != 7 {
+                    return Err("Invalid normal question format");
                 }
 
-                let solution = {
-                    let so = match split.next() {
-                        Some(val) => val,
-                        None => return Err("No solution found"),
-                    };
+                let answers = [
+                    split[2].to_owned(),
+                    split[3].to_owned(),
+                    split[4].to_owned(),
+                    split[5].to_owned(),
+                ];
+                let solution = parse_solution_letter_4(split[6])?;
 
-                    match so {
-                        "a" => 0,
-                        "b" => 1,
-                        "c" => 2,
-                        "d" => 3,
-                        _ => return Err("Invalid solution"),
-                    }
-                };
-
-                Ok(Question::normal(question, &answers, solution))
+                Ok(Question::normal_with_picture(
+                    question,
+                    &answers,
+                    solution,
+                    picture,
+                ))
             }
-
             ESTIMATE_NAME => {
-                let solution = {
-                    let so = match split.next() {
-                        Some(val) => val,
-                        None => return Err("No solution found"),
-                    };
+                if split.len() != 3 {
+                    return Err("Invalid estimate question format");
+                }
 
-                    match so.parse::<f64>() {
-                        Ok(val) => val,
-                        _ => return Err("Estimate solution not a number"),
-                    }
-                };
+                let solution = split[2]
+                    .parse::<f64>()
+                    .map_err(|_| "Estimate solution not a number")?;
 
-                Ok(Question::estimate(question, solution))
+                Ok(Question::estimate_with_picture(question, solution, picture))
             }
             SORT_NAME => {
-                let mut answers: [String; 4] = Default::default();
-                for answer in answers.iter_mut() {
-                    *answer = match split.next() {
-                        Some(val) => val.to_owned(),
-                        None => return Err("Answer not found"),
+                if split.len() != 10 {
+                    return Err("Invalid sort question format");
+                }
+
+                let answers = [
+                    split[2].to_owned(),
+                    split[3].to_owned(),
+                    split[4].to_owned(),
+                    split[5].to_owned(),
+                ];
+                let solutions = [
+                    parse_solution_letter_4(split[6])?,
+                    parse_solution_letter_4(split[7])?,
+                    parse_solution_letter_4(split[8])?,
+                    parse_solution_letter_4(split[9])?,
+                ];
+
+                Ok(Question::sort_with_picture(
+                    question,
+                    &answers,
+                    &solutions,
+                    picture,
+                ))
+            }
+            ASSIGN_NAME => {
+                if split.len() < 9 {
+                    return Err("Invalid zuordnen question format");
+                }
+
+                let answers = [
+                    split[2].to_owned(),
+                    split[3].to_owned(),
+                    split[4].to_owned(),
+                    split[5].to_owned(),
+                    split[6].to_owned(),
+                    split[7].to_owned(),
+                ];
+
+                let mut solution = [false; 6];
+                let mut any_solution = false;
+                for segment in &split[8..] {
+                    let trimmed = segment.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    for letter in trimmed.chars() {
+                        if letter.is_whitespace() || letter == ',' {
+                            continue;
+                        }
+                        let idx = parse_solution_letter_6(letter)?;
+                        solution[idx] = true;
+                        any_solution = true;
                     }
                 }
-                let mut solutions = [0usize; 4];
-                for solution in solutions.iter_mut() {
-                    let so = match split.next() {
-                        Some(val) => val,
-                        None => return Err("Answer not found"),
-                    };
 
-                    *solution = match so {
-                        "a" => 0,
-                        "b" => 1,
-                        "c" => 2,
-                        "d" => 3,
-                        _ => return Err("Invalid solution"),
-                    };
+                if !any_solution {
+                    return Err("Missing zuordnen solution");
                 }
 
-                Ok(Question::sort(question, &answers, &solutions))
+                Ok(Question::zuordnen_with_picture(
+                    question,
+                    &answers,
+                    solution,
+                    picture,
+                ))
             }
             _ => Err("?"),
         }
@@ -443,6 +849,7 @@ pub enum Answer {
     Normal(usize),
     Estimate(f64),
     Sort([usize; 4]),
+    Zuordnen(Vec<usize>),
 }
 
 impl Answer {
@@ -473,6 +880,36 @@ impl Answer {
 
             Ok(numbers)
         }
+
+        fn convert_letters_to_set(letters: &str) -> Result<Vec<usize>, String> {
+            if letters.trim().is_empty() {
+                return Ok(Vec::new());
+            }
+            let mut present = [false; 6];
+            for letter in letters.chars() {
+                if letter.is_whitespace() || letter == ',' {
+                    continue;
+                }
+                let idx = match letter.to_ascii_lowercase() {
+                    'a' => 0,
+                    'b' => 1,
+                    'c' => 2,
+                    'd' => 3,
+                    'e' => 4,
+                    'f' => 5,
+                    _ => return Err(format!("invalid letter: {letter}")),
+                };
+                present[idx] = true;
+            }
+
+            let mut values = Vec::new();
+            for (idx, has_value) in present.iter().enumerate() {
+                if *has_value {
+                    values.push(idx);
+                }
+            }
+            Ok(values)
+        }
         match s {
             NORMAL_NAME => answer_string
                 .parse()
@@ -483,6 +920,7 @@ impl Answer {
                 .map_err(|_| format!("could not parse answer \"{s}\" as a number"))
                 .map(Answer::Estimate),
             SORT_NAME => convert_letters_to_numbers(answer_string).map(Answer::Sort),
+            ASSIGN_NAME => convert_letters_to_set(answer_string).map(Answer::Zuordnen),
             _ => Err(format!("invalid answer type: \"{s}\"")),
         }
     }
@@ -500,6 +938,10 @@ pub enum UpdateEvent {
     ShowSolution,
     ShowPoints,
     ToggleLeaderboard,
+    ShowPictureInline,
+    ShowPictureTop,
+    ShowPictureFullscreen,
+    HidePicture,
 }
 
 impl Display for UpdateEvent {
@@ -515,6 +957,10 @@ impl Display for UpdateEvent {
                 ShowSolution => "show_solution",
                 ShowPoints => "show_points",
                 ToggleLeaderboard => "toggle_leaderboard",
+                ShowPictureInline => "show_picture_inline",
+                ShowPictureTop => "show_picture_top",
+                ShowPictureFullscreen => "show_picture_fullscreen",
+                HidePicture => "hide_picture",
             }
         )
     }

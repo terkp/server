@@ -1,6 +1,7 @@
 console.log("current group: " + localStorage.getItem("group_name"));
 
 let isLoginPage = window.location.href.endsWith("/login");
+let pictureFullscreenActive = false;
 
 if (localStorage.getItem("group_name") === null && !isLoginPage) {
   window.location.href = "/login";
@@ -10,6 +11,98 @@ if (localStorage.getItem("group_name") !== null) {
   document.getElementById("currentGroup").innerHTML =
     "Deine Gruppe: " + localStorage.getItem("group_name");
 }
+
+function updatePictureFullscreenButton() {
+  const buttons = document.querySelectorAll(".pictureFullscreenButton");
+  const hasPicture =
+    document.getElementById("questionImageBefore") !== null ||
+    document.getElementById("questionImageAfter") !== null;
+  if (buttons.length === 0) {
+    return;
+  }
+  if (!hasPicture) {
+    buttons.forEach((button) => {
+      button.style.display = "none";
+    });
+    return;
+  }
+  buttons.forEach((button) => {
+    button.style.display = "inline-flex";
+    button.textContent = pictureFullscreenActive ? "Verlassen" : "Vollbild";
+  });
+}
+
+async function enterPictureFullscreen() {
+  const root = document.getElementById("root");
+  if (root === null) {
+    return;
+  }
+  root.classList.add("picture-fullscreen-mode");
+  pictureFullscreenActive = true;
+  updatePictureFullscreenButton();
+
+  if (root.requestFullscreen) {
+    try {
+      await root.requestFullscreen({ navigationUI: "hide" });
+    } catch (error) {
+      console.warn("Fullscreen request failed", error);
+    }
+  }
+
+  if (screen.orientation && screen.orientation.lock) {
+    try {
+      await screen.orientation.lock("landscape");
+    } catch (error) {
+      console.warn("Orientation lock failed", error);
+    }
+  }
+}
+
+async function exitPictureFullscreen() {
+  const root = document.getElementById("root");
+  if (root !== null) {
+    root.classList.remove("picture-fullscreen-mode");
+  }
+  pictureFullscreenActive = false;
+  updatePictureFullscreenButton();
+
+  if (document.fullscreenElement && document.exitFullscreen) {
+    try {
+      await document.exitFullscreen();
+    } catch (error) {
+      console.warn("Exit fullscreen failed", error);
+    }
+  }
+
+  if (screen.orientation && screen.orientation.unlock) {
+    try {
+      screen.orientation.unlock();
+    } catch (error) {
+      console.warn("Orientation unlock failed", error);
+    }
+  }
+}
+
+function togglePictureFullscreen() {
+  if (pictureFullscreenActive) {
+    exitPictureFullscreen();
+  } else {
+    enterPictureFullscreen();
+  }
+}
+
+document.addEventListener("fullscreenchange", () => {
+  pictureFullscreenActive = document.fullscreenElement !== null;
+  updatePictureFullscreenButton();
+  if (!pictureFullscreenActive) {
+    const root = document.getElementById("root");
+    if (root !== null) {
+      root.classList.remove("picture-fullscreen-mode");
+    }
+  }
+});
+
+window.addEventListener("load", updatePictureFullscreenButton);
 
 {
   let xhr = new XMLHttpRequest();
@@ -33,6 +126,7 @@ if (localStorage.getItem("group_name") !== null) {
       if (groupQuestionState.questionState.answerIsShown) {
         document.getElementById("buttonSend").disabled = true;
       }
+      updatePictureFullscreenButton();
     }
   };
   xhr.send(localStorage.getItem("group_name"));

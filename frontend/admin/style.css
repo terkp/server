@@ -39,3 +39,24 @@ h1, h2 {
 table {
     width: 100%;
 }
+
+#questionStateWrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 1em;
+}
+
+#questionState {
+    flex: 1;
+}
+
+#pictureButtons {
+    width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+}
+
+#pictureButtons button {
+    width: 100%;
+}

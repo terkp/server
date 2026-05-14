@@ -1,8 +1,9 @@
 normal#Wie lange existiert das Pfingsten Quiz(wahrscheinlich)#100 jahre#Gerade ersten seit eben#Es existiert nicht#10 Jahre#d
-normal#Wie wird die erste 1993 wissenschaftlich  beschriebene Saola auch genannt?#Amerikanischer Kobalt#Europäischer Greif#Afrikanischer Drache#Asiatisches Einhorn#d
-sortier#Sortiere diese Brettspiele aufsteigend nach ihrem Veröffentlichungsdatum!#Risiko#Siedler von Catan#Monopoly#Halma#d#c#a#b
-normal#Was gehört nicht zu den Rosengewächsen?#Haselstrauch#Erdbeere#Apfel#Edelrose#a
-schaetzen#Wie lange ist das längste Lied, das jemals die Nummer 1 der Billboard Charts(US) erreichte  in Sekunden?#613
+zuordnen#Wie lange existiert das Pfingsten Quiz(wahrscheinlich)(zuordnung#100 jahre#Gerade ersten seit eben#Es existiert nicht#10 Jahre#1000 Jahre hu#1 Jahr#a#b#e#f
+normal#Wie wird die erste 1993 wissenschaftlich  beschriebene Saola auch genannt?#Amerikanischer Kobalt#Europäischer Greif#Afrikanischer Drache#Asiatisches Einhorn#d#pic -sd test.png
+sortier#Sortiere diese Brettspiele aufsteigend nach ihrem Veröffentlichungsdatum!#Risiko#Siedler von Catan#Monopoly#Halma#d#c#a#b#pic -su test.png
+normal#Was gehört nicht zu den Rosengewächsen?#Haselstrauch#Erdbeere#Apfel#Edelrose#a#pic -bd test.png
+schaetzen#Wie lange ist das längste Lied, das jemals die Nummer 1 der Billboard Charts(US) erreichte  in Sekunden?#613#pic -bu test.png
 normal#Was ist das Land mit den meisten Zeitzonen?#Frankreich#Russland#Australien#Brasilien#a
 normal#Was ist die größte Insel im Mittelmeer?#Zypern#Malta#Korsika#Sizilien#d
 sortier#Sortiere diese Sportarten aufsteigend nach der Anzahl der Spieler eines Teams die gleichzeitig spielen!#American Football#Rugby Union#Handball#Basketball#d#c#a#b

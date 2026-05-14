@@ -35,21 +35,23 @@
           <td><button onclick="goToQuestion()">Gehe zu Frage</button></td>
         </tr>
         <tr>
-          <td><span class="optionTitle">Ergebnisse eintragen:</span></td>
-          <td></td>
-          <td><button onclick="getResults()">Ergebnisse Eintragen</button></td>
-        </tr>
-        <tr>
           <td><span class="optionTitle">Antworten anzeigen:</span></td>
           <td></td>
           <td><button onclick="showAnswers()">Antworten anzeigen</button></td>
         </tr>
         <tr>
-          <td>
-            <span class="optionTitle">Lösung anzeigen (ohne Eintragen):</span>
-          </td>
+          <td><span class="optionTitle">Lösung anzeigen:</span></td>
           <td></td>
           <td><button onclick="showSolution()">Lösung Anzeigen</button></td>
+        </tr>
+        <tr>
+          <td><span class="optionTitle">Ergebnisse erneut erlauben:</span></td>
+          <td></td>
+          <td>
+            <button onclick="allowResultsEntry()">
+              Ergebnisse erneut erlauben
+            </button>
+          </td>
         </tr>
         <tr>
           <th class="subheading">Punktzahl</th>
@@ -103,7 +105,10 @@
       <h1>Frage</h1>
       <table id="currentQuestion"></table>
       <hr />
-      <table id="questionState"></table>
+      <div id="questionStateWrapper">
+        <table id="questionState"></table>
+        <div id="pictureButtons"></div>
+      </div>
     </div>
     <div class="container">
         <h1>Gruppen</h1>

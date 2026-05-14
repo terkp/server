@@ -1,0 +1,17 @@
+{% extends "display/index" %} {% block answers %}
+<div class="container">
+  <h1>Zuordnungsfrage</h1>
+
+  <h2>{{ question }}</h2>
+  <div class="grid grid-six">
+    <div class="answer">A: {{ answers[0] }}</div>
+    <div class="answer">B: {{ answers[1] }}</div>
+    <div class="answer">C: {{ answers[2] }}</div>
+    <div class="answer">D: {{ answers[3] }}</div>
+    <div class="answer">E: {{ answers[4] }}</div>
+    <div class="answer">F: {{ answers[5] }}</div>
+  </div>
+  <div id="solution">Lösung: {{ solution_letters }}</div>
+</div>
+
+{% endblock answers %}

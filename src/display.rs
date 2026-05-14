@@ -9,7 +9,7 @@ use serde::Serialize;
 #[derive(Serialize)]
 struct GroupScore {
     name: String,
-    score: isize,
+    score: f64,
 }
 
 #[get("/leaderboard")]
@@ -40,8 +40,9 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
         );
     }
     let question = &questions[server_data.current_question.load(Ordering::Relaxed)];
+    let image_path = question.display_picture_path();
 
-    let letters = ['A', 'B', 'C', 'D'];
+    let letters = ['A', 'B', 'C', 'D', 'E', 'F'];
 
     debug!("{}", serde_json::to_string(&question).unwrap());
 
@@ -50,34 +51,72 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
             question,
             answers,
             solution,
+            ..
         } => Template::render(
             "display/normal",
             context! {
                 question,
                 answers,
                 solution,
-                letters
+                letters,
+                image_path
             },
         ),
-        Question::Estimate { question, solution } => Template::render(
+        Question::Estimate {
+            question,
+            solution,
+            ..
+        } => Template::render(
             "display/estimate",
             context! {
                 question,
                 solution,
+                image_path,
             },
         ),
         Question::Sort {
             question,
             answers,
             solution,
+            ..
         } => Template::render(
             "display/sort",
             context! {
                 question,
                 answers,
                 solution,
-                letters
+                letters,
+                image_path
             },
         ),
+        Question::Zuordnen {
+            question,
+            answers,
+            solution,
+            ..
+        } => {
+            let solution_letters = solution
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, is_correct)| {
+                    if *is_correct {
+                        Some(letters[idx].to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            Template::render(
+                "display/zuordnen",
+                context! {
+                    question,
+                    answers,
+                    solution_letters,
+                    letters,
+                    image_path
+                },
+            )
+        }
     }
 }
