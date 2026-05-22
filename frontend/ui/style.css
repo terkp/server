@@ -143,8 +143,8 @@ h2 {
 
 #root.picture-fullscreen-mode #questionImageBefore img,
 #root.picture-fullscreen-mode #questionImageAfter img {
-  width: min(100vw, calc(100vh * 16 / 9));
-  height: min(100vh, calc(100vw * 9 / 16));
+  width: 100vw;
+  height: 100vh;
   max-height: none;
   object-fit: contain;
 }
@@ -152,8 +152,8 @@ h2 {
 @media (orientation: landscape) {
   #root.picture-fullscreen-mode #questionImageBefore img,
   #root.picture-fullscreen-mode #questionImageAfter img {
-    width: min(100vw, calc(100vh * 16 / 9));
-    height: min(100vh, calc(100vw * 9 / 16));
+    width: 100vw;
+    height: 100vh;
   }
 }
 

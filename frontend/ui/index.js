@@ -49,13 +49,7 @@ async function enterPictureFullscreen() {
     }
   }
 
-  if (screen.orientation && screen.orientation.lock) {
-    try {
-      await screen.orientation.lock("landscape");
-    } catch (error) {
-      console.warn("Orientation lock failed", error);
-    }
-  }
+  // Do not force landscape orientation for player fullscreen.
 }
 
 async function exitPictureFullscreen() {
@@ -74,13 +68,7 @@ async function exitPictureFullscreen() {
     }
   }
 
-  if (screen.orientation && screen.orientation.unlock) {
-    try {
-      screen.orientation.unlock();
-    } catch (error) {
-      console.warn("Orientation unlock failed", error);
-    }
-  }
+  // No orientation lock to release.
 }
 
 function togglePictureFullscreen() {
