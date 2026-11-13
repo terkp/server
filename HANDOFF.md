@@ -1,10 +1,10 @@
 # Handoff: bug audit of the quiz server
 
-Status on 2026-11-13: the audit is finished and a second agent has reviewed it (see "Review results" at the end). **No code has been changed yet.** The next step is to implement the fix plan below.
+Status on 2026-11-13: the audit is finished. An independent review of it by a second agent was started; whether it finished is recorded under "Review results" at the end. **No code has been changed yet.** The next step is to implement the fix plan below.
 
 To continue on another computer, check out this branch, open the folder in Claude Code and say:
 
-> Read HANDOFF.md and implement the fix plan. Take the review results at the end into account. Run `cargo check` when done and tell me what you could not test.
+> Read HANDOFF.md. If the "Review results" section says the review did not finish, first have a separate agent verify the findings and the fix plan against the code (read-only), as that section describes. Then implement the fix plan, taking the review results into account. Run `cargo check` when done and tell me what you could not test.
 
 The baseline compiles (`cargo check` passes on commit 40d8e38, Rocket 0.5.1, rocket_dyn_templates 0.1.0).
 
@@ -131,4 +131,16 @@ These are design issues, not bugs. Fixing them would be a redesign.
 
 ## Review results
 
-Pending: the review agent had not finished when this file was written.
+**The review did not finish.** The first computer was shut down at 15:58 on 2026-11-13 while the review agent was still running, so none of the findings or the plan have been independently checked.
+
+Before implementing, run the review again. The agent should work read-only and report:
+
+1. A verdict for each finding ID (confirmed, refuted or partly correct) with file and line evidence.
+2. Problems in the fix plan that would break existing behaviour. Points worth checking:
+   - Whether Rocket matches `format = "text/plain"` on the state request when the body is empty or null.
+   - Whether Tera fails on a `question_version` that one render path forgets to pass.
+   - Script load order: the per-type scripts sit inside the `answers` block, `ui/index.js` loads at the end of the body.
+   - Whether `EventStream!` works with a broadcast receiver and `Shutdown` in one `select!`, and whether `Event::retry` and `rocket::tokio::sync::broadcast` exist in Rocket 0.5.1.
+   - Whether Tera really auto-escapes the `.html.tera` templates (finding G5 assumes it does).
+   - Races in the question-version scheme.
+3. Real bugs the audit missed, network-related first.
