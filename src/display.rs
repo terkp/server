@@ -14,7 +14,7 @@ struct GroupScore {
 
 #[get("/leaderboard")]
 pub async fn show_leaderboard(server_data: &State<ServerData>) -> Template {
-    let groups = server_data
+    let mut groups = server_data
         .groups
         .iter()
         .map(|entry| GroupScore {
@@ -22,6 +22,12 @@ pub async fn show_leaderboard(server_data: &State<ServerData>) -> Template {
             score: entry.score,
         })
         .collect::<Vec<_>>();
+    // Highest score first, equal scores by name.
+    groups.sort_by(|a, b| {
+        b.score
+            .total_cmp(&a.score)
+            .then_with(|| a.name.cmp(&b.name))
+    });
     Template::render(
         "display/score",
         context! {
@@ -32,14 +38,19 @@ pub async fn show_leaderboard(server_data: &State<ServerData>) -> Template {
 
 #[get("/")]
 pub async fn show_display(server_data: &State<ServerData>) -> Template {
+    // Index and version are read under the questions lock, so the page never
+    // carries a version that is newer than its content.
     let questions = &server_data.questions.lock().await;
-    if questions.is_empty() {
+    let question_version = server_data.question_version.load(Ordering::SeqCst);
+    let current_question_idx = server_data.current_question.load(Ordering::SeqCst);
+
+    // No questions loaded, or the quiz is finished.
+    let Some(question) = questions.get(current_question_idx) else {
         return Template::render(
             "display/waiting",
-            context! { question: "Keine Frage Gefunden", solution: 0.0 },
+            context! { question: "Keine Frage Gefunden", solution: 0.0, question_version },
         );
-    }
-    let question = &questions[server_data.current_question.load(Ordering::Relaxed)];
+    };
     let image_path = question.display_picture_path();
 
     let letters = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -59,7 +70,8 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
                 answers,
                 solution,
                 letters,
-                image_path
+                image_path,
+                question_version
             },
         ),
         Question::Estimate {
@@ -72,6 +84,7 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
                 question,
                 solution,
                 image_path,
+                question_version
             },
         ),
         Question::Sort {
@@ -86,7 +99,8 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
                 answers,
                 solution,
                 letters,
-                image_path
+                image_path,
+                question_version
             },
         ),
         Question::Zuordnen {
@@ -114,7 +128,8 @@ pub async fn show_display(server_data: &State<ServerData>) -> Template {
                     answers,
                     solution_letters,
                     letters,
-                    image_path
+                    image_path,
+                    question_version
                 },
             )
         }

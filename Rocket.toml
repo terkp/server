@@ -1,3 +1,12 @@
 [default]
 template_dir = "frontend"
-address="0.0.0.0"
+address = "0.0.0.0"
+# Only errors, warnings and the launch message. Request logging for every
+# phone is a lot of console output, and a Windows console that is clicked into
+# (QuickEdit) blocks the server while it waits to print.
+# For debugging, set this to "normal" or start with ROCKET_LOG_LEVEL=normal.
+log_level = "critical"
+
+[default.limits]
+# Question files are sent as a string; Rocket's default limit is 8 KiB.
+string = "1 MiB"

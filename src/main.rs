@@ -1,23 +1,22 @@
 use std::{
-    ops::Deref,
     path::{Path, PathBuf},
-    sync::{atomic::Ordering, Arc},
+    sync::atomic::Ordering,
+    time::Duration,
 };
 
-use rand::{distr::Alphanumeric,  Rng};
 use rocket::{
     fairing::{Fairing, Info, Kind},
     fs::NamedFile,
     http::{Header, Status},
     response::stream::{Event, EventStream},
-    tokio::select,
+    tokio::{select, sync::broadcast::error::RecvError},
     Request, Response, Shutdown, State,
 };
 use rocket_dyn_templates::{context, Template};
 use server_data::{send_event, UpdateEvent};
 use simplelog::{ConfigBuilder, TermLogger};
 
-use crate::server_data::{EventBuffer, Question, ServerData, EVENT_BUFFER_KEY_LENGTH};
+use crate::server_data::{Question, ServerData};
 
 #[macro_use]
 extern crate rocket;
@@ -28,19 +27,62 @@ mod group;
 mod questions;
 mod server_data;
 
+/// How long browsers may reuse a picture without asking again. `NamedFile`
+/// sends no validators, so without this every page load downloads every
+/// picture again.
+const CACHE_PICTURES: &str = "public, max-age=3600";
+/// Scripts, styles and everything else are always fetched fresh, so a changed
+/// script is never mixed with an old page.
+const CACHE_NOTHING: &str = "no-cache";
+
+/// A file together with a `Cache-Control` header.
+#[derive(Responder)]
+struct StaticFile {
+    file: NamedFile,
+    cache_control: Header<'static>,
+}
+
+impl StaticFile {
+    async fn open(path: PathBuf) -> Option<Self> {
+        let is_picture = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(|extension| extension.to_ascii_lowercase())
+            .is_some_and(|extension| {
+                matches!(
+                    extension.as_str(),
+                    "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "ico"
+                )
+            });
+        let cache_control = if is_picture {
+            CACHE_PICTURES
+        } else {
+            CACHE_NOTHING
+        };
+        Some(Self {
+            file: NamedFile::open(path).await.ok()?,
+            cache_control: Header::new("Cache-Control", cache_control),
+        })
+    }
+}
+
 #[get("/<file..>")]
-async fn files(file: PathBuf) -> Option<NamedFile> {
-    NamedFile::open(Path::new("frontend").join(file))
-        .await
-        .ok()
+async fn files(file: PathBuf) -> Option<StaticFile> {
+    StaticFile::open(Path::new("frontend").join(file)).await
 }
 
 #[get("/pictures/<file..>")]
-async fn picture_files(file: PathBuf) -> Option<NamedFile> {
-    NamedFile::open(Path::new("pictures").join(file))
-        .await
-        .ok()
+async fn picture_files(file: PathBuf) -> Option<StaticFile> {
+    StaticFile::open(Path::new("pictures").join(file)).await
 }
+
+/// A cheap request the pages use to find out whether the server is reachable
+/// before they reload or navigate.
+#[get("/ping")]
+fn ping() -> &'static str {
+    "pong"
+}
+
 /// I am stupid and don't know how webdev works so this is here.
 #[options("/<_..>")]
 async fn cors_fix() -> Status {
@@ -86,48 +128,31 @@ fn setup_logger() {
     .unwrap();
 }
 
-/// Wrapper around an event buffer that automatically disconects it once it goes out of scope
-struct BufferHandle(Arc<EventBuffer>);
-
-impl Deref for BufferHandle {
-    type Target = Arc<EventBuffer>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Drop for BufferHandle {
-    fn drop(&mut self) {
-        self.0.disconnect();
-    }
-}
-
+/// The server-sent event stream every page listens to.
+///
+/// Events are only hints ("something changed"); the pages fetch the actual
+/// state from `/questions/state` and `/groups/get`. A client that missed
+/// events is sent "resync" and then does the same.
 #[get("/events")]
-pub async fn events(
-    server_data: &State<ServerData>,
-    mut shutdown: Shutdown,
-) -> EventStream![Event + '_] {
-    let key = rand::rng()
-        .sample_iter(&Alphanumeric)
-        .take(EVENT_BUFFER_KEY_LENGTH)
-        .map(char::from)
-        .collect::<String>();
-    let buffer = Arc::new(EventBuffer::with_capacity(4));
-    server_data
-        .client_event_buffers
-        .insert(key.clone(), Arc::clone(&buffer));
-    debug!("Added event buffer with id \"{key}\"");
-    let buffer = BufferHandle(buffer);
+pub fn events(server_data: &State<ServerData>, mut shutdown: Shutdown) -> EventStream![] {
+    // Subscribe here and not inside the stream: the stream body only starts
+    // running when the response is sent, and events in between would be lost.
+    let mut receiver = server_data.events.subscribe();
 
     EventStream! {
+        // Tell the browser to reconnect quickly after a lost connection.
+        yield Event::retry(Duration::from_secs(1));
         loop {
-            select! {
-                event = buffer.pop() => { yield event; }
-                _ = &mut shutdown => {
-                    break;
-                }
-            }
+            let event = select! {
+                message = receiver.recv() => match message {
+                    Ok(event) => Event::data(event.to_string()),
+                    // This client was too slow and events were dropped for it.
+                    Err(RecvError::Lagged(_)) => Event::data("resync"),
+                    Err(RecvError::Closed) => break,
+                },
+                _ = &mut shutdown => break,
+            };
+            yield event;
         }
     }
 }
@@ -142,6 +167,7 @@ fn rocket() -> _ {
             routes![
                 picture_files,
                 files,
+                ping,
                 events,
                 show_ui,
                 show_login,
@@ -195,11 +221,16 @@ pub async fn show_admin() -> Template {
 
 #[get("/")]
 pub async fn show_ui(server_data: &State<ServerData>) -> Template {
+    // Index and version are read under the questions lock, so the page never
+    // carries a version that is newer than its content.
     let questions = &server_data.questions.lock().await;
-    if questions.is_empty() {
-        return Template::render("ui/waiting", context! { question: "" });
-    }
-    let question = &questions[server_data.current_question.load(Ordering::Relaxed)];
+    let question_version = server_data.question_version.load(Ordering::SeqCst);
+    let current_question_idx = server_data.current_question.load(Ordering::SeqCst);
+
+    // No questions loaded, or the quiz is finished.
+    let Some(question) = questions.get(current_question_idx) else {
+        return Template::render("ui/waiting", context! { question: "", question_version });
+    };
     let image_before = question.ui_image_before();
     let image_after = question.ui_image_after();
 
@@ -221,7 +252,8 @@ pub async fn show_ui(server_data: &State<ServerData>) -> Template {
                 solution,
                 letters,
                 image_before,
-                image_after
+                image_after,
+                question_version
             },
         ),
         Question::Estimate {
@@ -235,6 +267,7 @@ pub async fn show_ui(server_data: &State<ServerData>) -> Template {
                 solution,
                 image_before,
                 image_after,
+                question_version
             },
         ),
         Question::Sort {
@@ -250,7 +283,8 @@ pub async fn show_ui(server_data: &State<ServerData>) -> Template {
                 solution,
                 letters,
                 image_before,
-                image_after
+                image_after,
+                question_version
             },
         ),
         Question::Zuordnen {
@@ -279,7 +313,8 @@ pub async fn show_ui(server_data: &State<ServerData>) -> Template {
                     solution_letters,
                     letters,
                     image_before,
-                    image_after
+                    image_after,
+                    question_version
                 },
             )
         }
@@ -291,8 +326,18 @@ pub async fn show_login() -> Template {
     Template::render("ui/login", context! {})
 }
 
-#[get("/toggle_leaderboard")]
-pub async fn toggle_leaderboard(server_data: &State<ServerData>) -> Status {
-    send_event(server_data, UpdateEvent::ToggleLeaderboard).await;
+/// Switches the display between the question and the leaderboard.
+///
+/// `show` is the wanted state. With it the request can be repeated safely;
+/// without it the state is flipped.
+#[get("/toggle_leaderboard?<show>")]
+pub async fn toggle_leaderboard(server_data: &State<ServerData>, show: Option<bool>) -> Status {
+    match show {
+        Some(show) => server_data.leaderboard_shown.store(show, Ordering::SeqCst),
+        None => {
+            server_data.leaderboard_shown.fetch_xor(true, Ordering::SeqCst);
+        }
+    }
+    send_event(server_data, UpdateEvent::ToggleLeaderboard);
     Status::Ok
 }

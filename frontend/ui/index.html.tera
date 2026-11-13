@@ -6,8 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="ui/style.css" />
     <title>Quiz</title>
+    <script type="text/javascript" src="/res/common.js"></script>
   </head>
-  <body>
+  <body data-question-version="{{ question_version }}">
     <div id="root">
       <header>
         <div id="currentGroup"></div>

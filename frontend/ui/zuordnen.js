@@ -1,15 +1,29 @@
+// This script runs before the buttons and ui/index.js are loaded, so it must
+// not touch the page at the top level. See the comment at the top of index.js.
+
 let selectedAnswers = new Set();
+// An empty selection is a valid answer, but only once the player has touched
+// the buttons, so that a stray tap on "send" does not submit nothing.
+let selectionTouched = false;
 let letters = ["A", "B", "C", "D", "E", "F"];
+
+function hasCompleteAnswer() {
+  return selectionTouched;
+}
+
+function selectedIndices() {
+  return Array.from(selectedAnswers).sort((a, b) => a - b);
+}
 
 function updateSelectionView() {
   let currentAnswer = document.getElementById("currentAnswer");
-  let selected = Array.from(selectedAnswers).sort((a, b) => a - b);
+  let selected = selectedIndices();
 
   if (selected.length === 0) {
-    currentAnswer.innerHTML = "";
+    currentAnswer.textContent = "";
     currentAnswer.style.display = "none";
   } else {
-    currentAnswer.innerHTML = selected.map((idx) => letters[idx]).join(" ");
+    currentAnswer.textContent = selected.map((idx) => letters[idx]).join(" ");
     currentAnswer.style.display = "block";
   }
 
@@ -21,12 +35,11 @@ function updateSelectionView() {
     button.classList.toggle("selectedAnswer", selectedAnswers.has(i));
   }
 
-  document.getElementById("buttonSend").disabled =
-    localStorage.getItem("answerIsShown") === "true" ||
-    localStorage.getItem("solutionIsShown") === "true";
+  updateSendButton();
 }
 
 function toggleAnswer(answerIndex) {
+  selectionTouched = true;
   if (selectedAnswers.has(answerIndex)) {
     selectedAnswers.delete(answerIndex);
   } else {
@@ -36,39 +49,19 @@ function toggleAnswer(answerIndex) {
 }
 
 function clearAnswerSelection() {
+  selectionTouched = true;
   selectedAnswers.clear();
   updateSelectionView();
 }
 
 function sendAnswer() {
-  let selected = Array.from(selectedAnswers).sort((a, b) => a - b);
-  let answerString = selected.map((idx) => letters[idx]).join("");
-  let name = localStorage.getItem("group_name");
-  let data = JSON.stringify({
-    name: name,
-    type: "zuordnen",
-    answer: answerString,
-  });
-
-  let xhr = new XMLHttpRequest();
-  xhr.open("POST", "/groups/set_answer", true);
-  xhr.setRequestHeader("Content-Type", "application/json");
-  xhr.onload = () => {
-    if (
-      xhr.status >= 400 &&
-      xhr.status < 500 &&
-      xhr.responseText.includes("not found")
-    ) {
-      localStorage.removeItem("group_name");
-      alert("Bitte logge dich erneut ein");
-      window.location.href = "/login";
-    } else if (xhr.status == 200) {
-      document.getElementById("answerContent").innerHTML =
-        selected.map((idx) => letters[idx]).join(" ");
-      document.getElementById("answer").style.display = "block";
-    }
-  };
-  xhr.send(data);
+  if (!hasCompleteAnswer()) {
+    return;
+  }
+  let selected = selectedIndices();
+  submitAnswer(
+    "zuordnen",
+    selected.map((idx) => letters[idx]).join(""),
+    selected.map((idx) => letters[idx]).join(" ")
+  );
 }
-
-updateSelectionView();

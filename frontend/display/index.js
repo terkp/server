@@ -5,8 +5,16 @@ const PICTURE_MODE_INLINE = 1;
 const PICTURE_MODE_TOP = 2;
 const PICTURE_MODE_FULLSCREEN = 3;
 
+// The picture/answer/solution state last received from the server, see
+// applyQuestionState.
+let lastStateSignature = null;
+
 function showSolutionContent() {
-  document.getElementById("solution").style.display = "block";
+  // The waiting page has no solution element.
+  let solution = document.getElementById("solution");
+  if (solution !== null) {
+    solution.style.display = "block";
+  }
 }
 
 function applyPictureMode(mode) {
@@ -32,87 +40,65 @@ function applyPictureMode(mode) {
   }
 }
 
-function applyQuestionState(groupQuestionState) {
-  localStorage.setItem(
-    "answerIsShown",
-    groupQuestionState.questionState.answerIsShown
-  );
-  localStorage.setItem(
-    "solutionIsShown",
-    groupQuestionState.questionState.solutionIsShown
-  );
-  if (groupQuestionState.questionState.solutionIsShown) {
-    showSolutionContent();
+// The groups' answers are in the page all the time, hidden by the style
+// sheet. This style element overrides that once they are revealed.
+var editCSS = document.createElement("style");
+document.body.appendChild(editCSS);
+
+function setGroupAnswersVisible(visible) {
+  editCSS.textContent = visible ? ".groupAnswerText { display: block; }" : "";
+}
+
+// Brings the page in line with the state fetched from the server.
+function applyQuestionState(state) {
+  if (!Quiz.pageIsCurrent(state)) {
+    // The page shows another question than the server is on. It reloads.
+    return;
   }
-  if (groupQuestionState.questionState.answerIsShown) {
-    editCSS.innerHTML += ".groupAnswerText { display: block; }";
+  if (state.leaderboardShown) {
+    Quiz.navigateWhenReachable("/display/leaderboard", true);
+    return;
   }
 
-  let pictureMode = groupQuestionState.questionState.pictureMode;
-  if (!groupQuestionState.questionState.pictureReleased) {
+  let questionState = state.questionState;
+  if (questionState.solutionIsShown) {
+    showSolutionContent();
+  }
+  setGroupAnswersVisible(questionState.answerIsShown);
+
+  let pictureMode = questionState.pictureMode;
+  if (!questionState.pictureReleased) {
     pictureMode = PICTURE_MODE_HIDDEN;
   }
   applyPictureMode(pictureMode);
-}
 
-var editCSS = document.createElement("style");
-editCSS.innerHTML = ".answerText {display: none;}";
-document.body.appendChild(editCSS);
-updateGroups();
-
-{
-  let xhr = new XMLHttpRequest();
-  xhr.open("POST", "/questions/state", true);
-  xhr.onload = (e) => {
-    console.log(xhr.status + ": " + xhr.responseText);
-    if (xhr.status === 200) {
-      applyQuestionState(JSON.parse(xhr.responseText));
-    }
-  };
-  xhr.send(localStorage.getItem("group_name"));
-}
-
-if (typeof EventSource !== "undefined") {
-  //create an object, passing it the name and location of the server side script
-  var eSource = new EventSource("/events");
-  //detect message receipt
-  eSource.onmessage = function (event) {
-    //write the received data to the page
-    if (event.data === "show_solution") {
-      showSolutionContent();
-      localStorage.setItem("solutionIsShown", true);
-    } else if (event.data === "show_picture_inline") {
-      applyPictureMode(PICTURE_MODE_INLINE);
-    } else if (event.data === "show_picture_top") {
-      applyPictureMode(PICTURE_MODE_TOP);
-    } else if (event.data === "show_picture_fullscreen") {
-      applyPictureMode(PICTURE_MODE_FULLSCREEN);
-    } else if (event.data === "hide_picture") {
-      applyPictureMode(PICTURE_MODE_HIDDEN);
-    } else if (event.data === "show_answers") {
-      editCSS.innerHTML = ".groupAnswerText {display: block;}";
-      localStorage.setItem("answerIsShown", true);
-    } else if (event.data === "toggle_leaderboard") {
-      window.location.href = "/display/leaderboard";
-    } else if (event.data === "groups") {
-      updateGroups();
-    } else {
-      location.reload(true);
-    }
-  };
-} else {
-  alert("Whoops! Your browser doesn't receive server-sent events.");
+  // Every change of these values is announced by an event. If one shows up
+  // here although no event arrived recently, the event connection is dead
+  // without the browser having noticed, so it is replaced.
+  let signature = [
+    questionState.answerIsShown,
+    questionState.solutionIsShown,
+    pictureMode,
+  ].join();
+  if (
+    lastStateSignature !== null &&
+    lastStateSignature !== signature &&
+    Date.now() - quizEvents.lastActivity() > 3000
+  ) {
+    quizEvents.reconnect();
+  }
+  lastStateSignature = signature;
 }
 
 function answerToString(answer) {
   const lettersSix = ["A", "B", "C", "D", "E", "F"];
   let answerString = "";
   if (answer.Sort != undefined) {
-    for (sortedAnswer of answer.Sort) {
+    for (const sortedAnswer of answer.Sort) {
       answerString += letters[sortedAnswer];
     }
   } else if (answer.Zuordnen != undefined) {
-    for (selectedAnswer of answer.Zuordnen) {
+    for (const selectedAnswer of answer.Zuordnen) {
       answerString += lettersSix[selectedAnswer];
     }
   } else if (answer.Estimate != undefined) {
@@ -123,37 +109,94 @@ function answerToString(answer) {
   return answerString;
 }
 
-function updateGroups() {
+// Group names are chosen by the players, so they are only ever put into the
+// page as text, never as HTML.
+function renderGroups(groups) {
   let answersElement = document.getElementById("group_answers");
-  let xhr = new XMLHttpRequest();
-  xhr.open("GET", "/groups/get");
-  xhr.send();
-  xhr.onload = (e) => {
-    answersElement.innerHTML = "";
-    let answers = JSON.parse(xhr.responseText);
-    for (let [groupName, answer] of Object.entries(answers).sort()) {
-      if (groupName.length > 20) {
-        groupName = groupName.substring(0, 18) + "...";
-      }
-      let answerText = "";
-      if (answer["answer"] != null) {
-        answerText =
-          '<span class="groupAnswerText">' +
-          answerToString(answer["answer"]).trim() +
-          "</span>";
-      }
-      answersElement.innerHTML +=
-        '<div class="groupAnswer"><span class="groupName">' +
-        groupName.trim() +
-        "</span>: " +
-        answerText.trim() +
-        "<br></div>";
+  answersElement.textContent = "";
+  let names = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+  for (const name of names) {
+    let groupName = name.trim();
+    if (groupName.length > 20) {
+      groupName = groupName.substring(0, 18) + "...";
     }
-  };
+
+    let row = document.createElement("div");
+    row.className = "groupAnswer";
+
+    let nameElement = document.createElement("span");
+    nameElement.className = "groupName";
+    nameElement.textContent = groupName;
+    row.appendChild(nameElement);
+    row.appendChild(document.createTextNode(": "));
+
+    let answer = groups[name]["answer"];
+    if (answer != null) {
+      let answerElement = document.createElement("span");
+      answerElement.className = "groupAnswerText";
+      answerElement.textContent = answerToString(answer).trim();
+      row.appendChild(answerElement);
+    }
+    answersElement.appendChild(row);
+  }
 }
 
+// Each of these fetches from the server and applies the result; see
+// Quiz.createSync for how overlapping and failed requests are handled.
+const updateGroups = Quiz.createSync(Quiz.fetchGroups, renderGroups, true);
+const resyncState = Quiz.createSync(
+  () => Quiz.fetchState(""),
+  applyQuestionState
+);
+
+function refreshEverything() {
+  resyncState();
+  updateGroups();
+}
+
+const quizEvents = Quiz.connectEvents((data) => {
+  // The events with a visible effect are applied right away. The state is
+  // fetched as well, which also covers events that were missed before.
+  if (data === "show_solution") {
+    showSolutionContent();
+    resyncState();
+  } else if (data === "show_picture_inline") {
+    applyPictureMode(PICTURE_MODE_INLINE);
+    resyncState();
+  } else if (data === "show_picture_top") {
+    applyPictureMode(PICTURE_MODE_TOP);
+    resyncState();
+  } else if (data === "show_picture_fullscreen") {
+    applyPictureMode(PICTURE_MODE_FULLSCREEN);
+    resyncState();
+  } else if (data === "hide_picture") {
+    applyPictureMode(PICTURE_MODE_HIDDEN);
+    resyncState();
+  } else if (data === "show_answers") {
+    setGroupAnswersVisible(true);
+    resyncState();
+  } else if (data === "groups") {
+    updateGroups();
+  } else {
+    // "question", "toggle_leaderboard", "resync" and anything unknown: the
+    // state tells whether to reload or to switch to the leaderboard. The
+    // page is not reloaded blindly, so a reconnect does not blank the screen.
+    refreshEverything();
+  }
+}, refreshEverything);
+
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) {
+    quizEvents.reconnect();
+  }
+});
+// Safety net for everything that can make the page miss an event.
+setInterval(refreshEverything, 12000);
+
+refreshEverything();
+
 /*
-1. Anzeige öffnen 
+1. Anzeige öffnen
 2. EventStream dingens erstellen
 3. Wenn zb Lösung angezeigt werden soll, event an eventstream geben
  */

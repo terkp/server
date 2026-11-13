@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="admin/style.css" />
     <title>Admin Panel</title>
+    <script type="text/javascript" src="/res/common.js"></script>
     <script type="text/javascript" src="admin/index.js" defer></script>
   </head>
   <body>
@@ -80,7 +81,9 @@
           <td><span class="optionTitle">Punktestand anzeigen:</span></td>
           <td></td>
           <td>
-            <button onclick="toggleLeaderboard()">Punktestand anzeigen</button>
+            <button id="leaderboardButton" onclick="toggleLeaderboard()">
+              Punktestand anzeigen
+            </button>
           </td>
         </tr>
         <tr>

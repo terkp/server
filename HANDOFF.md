@@ -1,10 +1,6 @@
 # Handoff: bug audit of the quiz server
 
-Status on 2026-11-13: the audit is finished. An independent review of it by a second agent was started; whether it finished is recorded under "Review results" at the end. **No code has been changed yet.** The next step is to implement the fix plan below.
-
-To continue on another computer, check out this branch, open the folder in Claude Code and say:
-
-> Read HANDOFF.md. If the "Review results" section says the review did not finish, first have a separate agent verify the findings and the fix plan against the code (read-only), as that section describes. Then implement the fix plan, taking the review results into account. Run `cargo check` when done and tell me what you could not test.
+Status on 2026-11-13: the audit and its review are finished, and **the fix plan is implemented in the working tree (not committed)**. See "Implementation status" at the end for what was done differently from the plan and what is still untested. The sections in between are the original audit, plan and review, kept for reference.
 
 The baseline compiles (`cargo check` passes on commit 40d8e38, Rocket 0.5.1, rocket_dyn_templates 0.1.0).
 
@@ -202,3 +198,38 @@ What would break:
 ### Not-fixed items, reviewer's opinion
 
 None is a must-fix for the network goal. The one worth reconsidering is the hidden `#solution` element together with `GET /questions/current`: once resync exists, the solution text can be delivered in `/questions/state` only when `solutionIsShown`. A shared admin token would be little work but is a trust decision.
+
+## Implementation status
+
+Implemented on 2026-11-13: P1 to P10, the review's corrections 1 to 18, and A1, A3, A4, A5 and A6. Of A2 only the caching half is done.
+
+### Where the code differs from the fix plan
+
+- **Status codes of `/groups/set_answer`**: 400 unparsable or wrong question type, 403 answers closed, 409 stale question version or no current question, **410 group does not exist** (was 422 with "not found" in the text).
+- **`/groups/new`** answers 200 with `{"name": <canonical name>, "created": true|false}` both for a new group and for joining an existing one, and 400 with a German message for an unusable name. There is no 422 any more.
+- **`/questions/state`** has no `format` and also returns `groupName`, `answersBlocked`, `leaderboardShown`, `questionIndex` and `questionCount`.
+- **`/questions/next`** takes an optional `?from=<index>` and answers 409 if that is not the current question. It returns a plain status instead of redirecting to `/questions/current`.
+- **`/toggle_leaderboard`** takes an optional `?show=true|false`.
+- **`/questions/show_solution`** also closes answering, and returns 404 when there is no current question.
+- **New route `/ping`**, used by the pages before they reload or navigate.
+- **`common.js`** exposes one global, `Quiz`. Besides the planned helpers it has `createSync` (single-flight fetch-and-apply with retry), which all pages use for the state and the group list.
+- **Reload guard**: a page reloads at most once per question version within 10 s (not strictly once), so a page can never get stuck on an old question.
+- **Caching**: pictures and other image files are sent with `Cache-Control: public, max-age=3600`, everything else with `no-cache`.
+- **`Rocket.toml`** sets `log_level = "critical"`. Use `ROCKET_LOG_LEVEL=normal` to see requests again.
+
+### Tested
+
+`cargo check` passes without warnings. The server was built and run under WSL (Linux), and the pages were driven in headless Chrome: answering for all four question types, reveal, double-clicked "next", going past the last question, leaderboard, picture modes, group deletion, login, a failed answer submission, an answer sent from a stale page, and a server restart with the pages open.
+
+### Not tested
+
+- **`cargo build` on Windows.** On the computer where this was implemented it fails at link time because the Windows SDK is not installed (`bcrypt.lib` not found). That is the machine, not the code; run it on a computer with the SDK.
+- Real phones and real WiFi: phone sleep, changing access points, Safari on iOS. The reconnect logic for these cases (reconnect on `visibilitychange`, resync every 12 s) has only been read, not exercised.
+- Load with many phones at once.
+- The `"resync"` event that a client gets after falling more than 256 events behind.
+
+### Still open
+
+- **A2**: `pictures/n1_quiz_smd.jpg` (10.6 MB) is not in the repository and was not shrunk. Do that by hand.
+- The "Known, deliberately not fixed" items are unchanged.
+- Remove this file once the work is merged.

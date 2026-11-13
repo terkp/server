@@ -1,28 +1,47 @@
-updateGroups();
-updateQuestion();
-updateQuestionState();
-
 let currentQuestionData = null;
 let currentQuestionType = null;
-let latestQuestionState = null;
+// The last answer of /questions/state, null until it was fetched once.
+let latestState = null;
 const letters = ["A", "B", "C", "D", "E", "F"];
 
-if (typeof EventSource !== "undefined") {
-  var eSource = new EventSource("/events");
-  eSource.onmessage = function (event) {
-    if (event.data === "groups") {
-      updateGroups();
-    } else if (event.data === "question") {
-      updateQuestion();
-    }
-    updateQuestionState();
-  };
-} else {
-  alert("Whoops! Your browser doesn't receive server-sent events.");
+// Sends a command to the server and afterwards refreshes everything shown on
+// this page. `action` names the command in error messages. A failure is
+// reported, except for the statuses listed in `quietStatuses`.
+// Resolves to { ok, status, text }, or to null if the server did not answer.
+function sendCommand(action, url, options, quietStatuses) {
+  return Quiz.fetchWithTimeout(url, options, 8000)
+    .then(
+      (result) => {
+        if (!result.ok && !(quietStatuses || []).includes(result.status)) {
+          let message = action + " fehlgeschlagen (Status " + result.status + ")";
+          // Our own handlers answer with a plain text reason, Rocket's
+          // built-in error pages with HTML that is of no use here.
+          if (result.text !== "" && !result.text.startsWith("<")) {
+            message += ":\n" + result.text;
+          }
+          alert(message);
+        }
+        return result;
+      },
+      () => {
+        alert(action + " fehlgeschlagen: Der Server antwortet nicht.");
+        return null;
+      }
+    )
+    .then((result) => {
+      refreshEverything();
+      return result;
+    });
 }
 
 function nextQuestion() {
-  fetch("/questions/next").then((_) => updateQuestion());
+  // Telling the server which question we are coming from makes a double
+  // click harmless: the second request no longer matches and is refused (409).
+  let url = "/questions/next";
+  if (latestState !== null) {
+    url += "?from=" + latestState.questionIndex;
+  }
+  sendCommand("Nächste Frage", url, {}, [409]);
 }
 
 function goToQuestion() {
@@ -33,26 +52,36 @@ function goToQuestion() {
     alert("Bitte Zahl eingeben");
     return;
   }
-  fetch("/questions/set", {
+  sendCommand("Gehe zu Frage", "/questions/set", {
     method: "POST",
-    body: questionNumber,
-  }).then((_) => updateQuestion());
+    headers: { "Content-Type": "text/plain" },
+    body: String(questionNumber),
+  });
 }
 
 let questionFilePicker = document.getElementById("questionFilePicker");
 
 function loadQuestions() {
+  if (questionFilePicker.files.length === 0) {
+    alert("Bitte zuerst eine Datei auswählen");
+    return;
+  }
   let reader = new FileReader();
-  reader.readAsText(questionFilePicker.files[0]);
   reader.onload = (e) => {
-    fetch("/questions/load", {
+    sendCommand("Fragen laden", "/questions/load", {
       method: "POST",
+      headers: { "Content-Type": "text/plain" },
       body: e.target.result,
+    }).then((result) => {
+      if (result !== null && result.ok) {
+        alert(result.text + " Fragen geladen");
+      }
     });
   };
   reader.onerror = () => {
-    alert("error reading file");
+    alert("Die Datei konnte nicht gelesen werden");
   };
+  reader.readAsText(questionFilePicker.files[0]);
 }
 
 function formatSolution(type, solution) {
@@ -90,41 +119,49 @@ function formatGroupAnswer(answer) {
   return JSON.stringify(answer);
 }
 
-function updateQuestion() {
-  fetch("/questions/current")
-    .then((e) => e.json())
-    .then((data) => {
-      let questionElem = document.getElementById("currentQuestion");
-      if (data === null) {
-        currentQuestionData = null;
-        currentQuestionType = null;
-        questionElem.innerHTML = "<tr><th>Frage:</b></tr><tr>Keine</tr>";
-        renderPictureButtons(null);
-        return;
-      }
+// Appends a table row. The cells are inserted as text, never as HTML: group
+// names and question texts must not be able to inject markup into this page.
+function addRow(table, cells, cellTag) {
+  let row = document.createElement("tr");
+  for (const cell of cells) {
+    let cellElement = document.createElement(cellTag || "td");
+    cellElement.textContent = cell;
+    row.appendChild(cellElement);
+  }
+  table.appendChild(row);
+}
 
-      questionElem.innerHTML = `<tr><td>Nummer</td><td>${data[0]}</td></tr>`;
-      for (const [type, questionData] of Object.entries(data[1])) {
-        currentQuestionType = type;
-        currentQuestionData = questionData;
-        questionElem.innerHTML += `<tr><td>Typ</td><td>${type}</td></tr>`;
-        questionElem.innerHTML += `<tr><td>Frage</td><td>${JSON.stringify(
-          questionData.question
-        )}</td></tr>`;
-        if (
-          questionData.answers !== null &&
-          questionData.answers !== undefined
-        ) {
-          questionElem.innerHTML += `<tr><td>Antworten</td><td>${JSON.stringify(
-            formatQuestionAnswers(type, questionData.answers)
-          )}</td></tr>`;
-        }
-        questionElem.innerHTML += `<tr><td>Lösung</td><td>${JSON.stringify(
-          formatSolution(type, questionData.solution)
-        )}</td></tr>`;
-      }
-      renderPictureButtons(latestQuestionState);
-    });
+// `data` is null if there is no current question, else [index, question].
+function renderQuestion(data) {
+  let questionElem = document.getElementById("currentQuestion");
+  questionElem.textContent = "";
+  if (data === null) {
+    currentQuestionData = null;
+    currentQuestionType = null;
+    addRow(questionElem, ["Frage:"], "th");
+    addRow(questionElem, ["Keine"]);
+    renderPictureButtons(null);
+    return;
+  }
+
+  addRow(questionElem, ["Nummer", data[0]]);
+  for (const [type, questionData] of Object.entries(data[1])) {
+    currentQuestionType = type;
+    currentQuestionData = questionData;
+    addRow(questionElem, ["Typ", type]);
+    addRow(questionElem, ["Frage", JSON.stringify(questionData.question)]);
+    if (questionData.answers !== null && questionData.answers !== undefined) {
+      addRow(questionElem, [
+        "Antworten",
+        JSON.stringify(formatQuestionAnswers(type, questionData.answers)),
+      ]);
+    }
+    addRow(questionElem, [
+      "Lösung",
+      JSON.stringify(formatSolution(type, questionData.solution)),
+    ]);
+  }
+  renderPictureButtons(latestState === null ? null : latestState.questionState);
 }
 
 function getPictureMeta() {
@@ -180,119 +217,174 @@ function renderPictureButtons(questionState) {
   );
 }
 
-function updateGroups() {
-  fetch("/groups/get")
-    .then((e) => e.json())
-    .then((data) => {
-      let groupsElem = document.getElementById("groups");
-      groupsElem.innerHTML = "<th>Gruppe</th> <th>Score</th> <th>Antwort</th>";
-      for (const [groupName, groupData] of Object.entries(data).sort()) {
-        groupsElem.innerHTML += `<tr><td><b>${groupName}</b></td> <td>${
-          groupData.score
-        }</td> <td>${formatGroupAnswer(groupData.answer)}</td></tr>`;
-      }
-    });
+function renderGroups(data) {
+  let groupsElem = document.getElementById("groups");
+  groupsElem.textContent = "";
+  addRow(groupsElem, ["Gruppe", "Score", "Antwort"], "th");
+  let names = Object.keys(data).sort((a, b) => a.localeCompare(b));
+  for (const name of names) {
+    let row = document.createElement("tr");
+    row.innerHTML =
+      "<td><b>" +
+      Quiz.escapeHtml(name) +
+      "</b></td><td>" +
+      Quiz.escapeHtml(data[name].score) +
+      "</td><td>" +
+      Quiz.escapeHtml(formatGroupAnswer(data[name].answer)) +
+      "</td>";
+    groupsElem.appendChild(row);
+  }
 }
 
-function updateQuestionState() {
-  fetch("/questions/state", { method: "POST", body: "" })
-    .then((e) => e.json())
-    .then((data) => {
-      let stateElem = document.getElementById("questionState");
-      let questionState = data.questionState;
-      latestQuestionState = questionState;
-      stateElem.innerHTML = "";
-      stateElem.innerHTML += `<tr><td>Antwort angezeigt</td><td>${
-        !questionState.answerIsShown ? "Nein" : "Ja"
-      }</td></tr>`;
-      stateElem.innerHTML += `<tr><td>Lösung angezeigt</td><td>${
-        !questionState.solutionIsShown ? "Nein" : "Ja"
-      }</td></tr>`;
-      renderPictureButtons(questionState);
-    });
+function renderState(state) {
+  latestState = state;
+  let questionState = state.questionState;
+  let stateElem = document.getElementById("questionState");
+  stateElem.textContent = "";
+
+  let finished =
+    state.questionCount > 0 && state.questionIndex >= state.questionCount;
+  addRow(stateElem, [
+    "Fragen geladen",
+    state.questionCount + (finished ? " (alle Fragen durch)" : ""),
+  ]);
+  addRow(stateElem, [
+    "Antwort angezeigt",
+    questionState.answerIsShown ? "Ja" : "Nein",
+  ]);
+  addRow(stateElem, [
+    "Lösung angezeigt",
+    questionState.solutionIsShown ? "Ja" : "Nein",
+  ]);
+  addRow(stateElem, [
+    "Antworten gesperrt",
+    state.answersBlocked ? "Ja" : "Nein",
+  ]);
+  addRow(stateElem, [
+    "Display zeigt Punktestand",
+    state.leaderboardShown ? "Ja" : "Nein",
+  ]);
+
+  document.getElementById("leaderboardButton").textContent =
+    state.leaderboardShown ? "Punktestand ausblenden" : "Punktestand anzeigen";
+  renderPictureButtons(questionState);
+}
+
+// Each of these fetches from the server and applies the result; see
+// Quiz.createSync for how overlapping and failed requests are handled.
+const updateGroups = Quiz.createSync(Quiz.fetchGroups, renderGroups, true);
+const updateQuestion = Quiz.createSync(
+  // Without a current question the answer is a 406 with the body "null".
+  () =>
+    Quiz.fetchWithTimeout("/questions/current", { cache: "no-store" }, 5000).then(
+      (result) => JSON.parse(result.text)
+    ),
+  renderQuestion
+);
+const updateQuestionState = Quiz.createSync(
+  () => Quiz.fetchState(""),
+  renderState
+);
+
+function refreshEverything() {
+  updateGroups();
+  updateQuestion();
+  updateQuestionState();
 }
 
 function showAnswers() {
-  fetch("/questions/show_answers").await;
+  sendCommand("Antworten anzeigen", "/questions/show_answers");
 }
 
 function toggleLeaderboard() {
-  fetch("/toggle_leaderboard").await;
+  // Send the wanted state instead of "toggle", so that a repeated request
+  // does not flip the display back.
+  let url = "/toggle_leaderboard";
+  if (latestState !== null) {
+    url += "?show=" + !latestState.leaderboardShown;
+  }
+  sendCommand("Punktestand umschalten", url);
 }
 
 function showSolution() {
-  fetch("/questions/show_solution").then((_) => updateQuestionState());
+  sendCommand("Lösung anzeigen", "/questions/show_solution");
 }
 
 function allowResultsEntry() {
-  fetch("/questions/allow_results_entry").then((_) => updateQuestionState());
+  sendCommand("Ergebnisse erneut erlauben", "/questions/allow_results_entry");
 }
 
 function showPictureInline() {
-  fetch("/questions/show_picture_inline").then((_) => updateQuestionState());
+  sendCommand("Bild anzeigen", "/questions/show_picture_inline");
 }
 
 function showPictureTop() {
-  fetch("/questions/show_picture_top").then((_) => updateQuestionState());
+  sendCommand("Bild anzeigen", "/questions/show_picture_top");
 }
 
 function showPictureFullscreen() {
-  fetch("/questions/show_picture_fullscreen").then((_) => updateQuestionState());
+  sendCommand("Bild anzeigen", "/questions/show_picture_fullscreen");
 }
 
 function hidePicture() {
-  fetch("/questions/hide_picture").then((_) => updateQuestionState());
+  sendCommand("Bild ausblenden", "/questions/hide_picture");
+}
+
+function readScoreInputs() {
+  let groupName = document.getElementById("groupNameInput").value;
+  let score = parseFloat(
+    document.getElementById("groupScoreInput").value.trim()
+  );
+  if (isNaN(score)) {
+    alert("Bitte Zahl eingeben");
+    return null;
+  }
+  return {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: groupName,
+      score: score,
+    }),
+  };
 }
 
 function setScore() {
-  let groupName = document.getElementById("groupNameInput").value;
-  let score = parseFloat(
-    document.getElementById("groupScoreInput").value.trim()
-  );
-  if (isNaN(score)) {
-    alert("Bitte Zahl eingeben");
-    return;
+  let request = readScoreInputs();
+  if (request !== null) {
+    sendCommand("Punktzahl setzen", "/groups/set_score", request);
   }
-  fetch("/groups/set_score", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      name: groupName,
-      score: score,
-    }),
-  }).await;
-  updateGroups();
 }
 
 function addScore() {
-  let groupName = document.getElementById("groupNameInput").value;
-  let score = parseFloat(
-    document.getElementById("groupScoreInput").value.trim()
-  );
-  if (isNaN(score)) {
-    alert("Bitte Zahl eingeben");
-    return;
+  let request = readScoreInputs();
+  if (request !== null) {
+    sendCommand("Punktzahl addieren", "/groups/add_score", request);
   }
-  fetch("/groups/add_score", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      name: groupName,
-      score: score,
-    }),
-  }).await;
-  updateGroups();
 }
 
 function deleteGroup() {
   let groupName = document.getElementById("groupNameInputDelete").value;
-  fetch("/groups/delete", {
+  sendCommand("Gruppe löschen", "/groups/delete", {
     method: "POST",
+    headers: { "Content-Type": "text/plain" },
     body: groupName,
-  }).await;
-  updateGroups();
+  });
 }
+
+const quizEvents = Quiz.connectEvents((data) => {
+  if (data === "groups") {
+    updateGroups();
+  } else if (data === "question" || data === "resync") {
+    refreshEverything();
+  } else {
+    updateQuestionState();
+  }
+}, refreshEverything);
+
+// Safety net for everything that can make the page miss an event.
+setInterval(refreshEverything, 15000);
+
+refreshEverything();

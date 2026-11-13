@@ -1,22 +1,14 @@
 #![allow(clippy::result_large_err)]
 
-use crossbeam::queue::ArrayQueue;
 use dashmap::{mapref::entry::Entry, DashMap};
-use log::{info, warn};
-use rocket::{
-    response::stream::Event,
-    tokio::sync::{Mutex, Semaphore},
-    State,
-};
+use log::info;
+use rocket::tokio::sync::{broadcast, Mutex};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
     path::{Component, Path},
     str::FromStr,
-    sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use thiserror::Error;
 
@@ -27,7 +19,11 @@ const ESTIMATE_2_POINTS: f64 = 2.0;
 const ESTIMATE_3_POINTS: f64 = 1.0;
 const ASSIGN_POINTS_PER_ITEM: f64 = 0.5;
 
-pub const EVENT_BUFFER_KEY_LENGTH: usize = 32;
+/// Number of events a slow client may fall behind before it is told to resync.
+const EVENT_CHANNEL_CAPACITY: usize = 256;
+
+/// Maximum length of a group name, counted in characters.
+pub const MAX_GROUP_NAME_CHARS: usize = 40;
 
 const NORMAL_NAME: &str = "normal";
 const ESTIMATE_NAME: &str = "schaetzen";
@@ -42,16 +38,64 @@ pub const PICTURE_MODE_INLINE: usize = 1;
 pub const PICTURE_MODE_TOP: usize = 2;
 pub const PICTURE_MODE_FULLSCREEN: usize = 3;
 
-#[derive(Default, Debug)]
+/// The shared state of the quiz.
+///
+/// The `questions` mutex is also the lock for everything that belongs to the
+/// current question: `current_question`, `question_version`, `question_state`
+/// and `block_answer` are only changed while it is held, and code that needs a
+/// consistent view of them (page rendering, the state endpoint, `set_answer`)
+/// reads them while holding it.
+#[derive(Debug)]
 pub struct ServerData {
     pub groups: DashMap<String, GroupData>,
     pub questions: Mutex<Vec<Question>>,
+    /// Index into `questions`. Equal to `questions.len()` once the quiz is finished.
     pub current_question: AtomicUsize,
+    /// Changes whenever the current question changes (load, next, set). Seeded
+    /// randomly so that a server restart also counts as a change. Pages carry
+    /// the version they were rendered with and reload when it no longer matches.
+    pub question_version: AtomicUsize,
     pub question_state: QuestionState,
     pub block_answer: AtomicBool,
-    pub client_event_buffers: DashMap<String, Arc<EventBuffer>>, // nächste frage event -> event_buffer
-                                                                 // ui <- nächste frage event
-                                                                 // display <- ????
+    /// Whether the display should show the leaderboard instead of the question.
+    pub leaderboard_shown: AtomicBool,
+    /// Every `/events` connection subscribes to this channel.
+    pub events: broadcast::Sender<UpdateEvent>,
+}
+
+impl Default for ServerData {
+    fn default() -> Self {
+        let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+        Self {
+            groups: DashMap::new(),
+            questions: Mutex::new(Vec::new()),
+            current_question: AtomicUsize::new(0),
+            question_version: AtomicUsize::new(rand::random::<u32>() as usize),
+            question_state: QuestionState::default(),
+            block_answer: AtomicBool::new(false),
+            leaderboard_shown: AtomicBool::new(false),
+            events,
+        }
+    }
+}
+
+/// The canonical form of a group name. Every lookup goes through this, so
+/// "Team" and "Team " (phone keyboards like to append a space) are one group.
+pub fn normalize_group_name(name: &str) -> &str {
+    name.trim()
+}
+
+/// Normalizes a name for a new group and checks that it is usable.
+/// The error text is shown to the player.
+pub fn validate_group_name(name: &str) -> Result<&str, &'static str> {
+    let name = normalize_group_name(name);
+    if name.is_empty() {
+        return Err("Der Gruppenname darf nicht leer sein.");
+    }
+    if name.chars().count() > MAX_GROUP_NAME_CHARS {
+        return Err("Der Gruppenname darf höchstens 40 Zeichen lang sein.");
+    }
+    Ok(name)
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -98,6 +142,11 @@ impl QuestionState {
         self.results_recorded.store(recorded, Ordering::Relaxed);
     }
 
+    /// Marks the results as recorded and returns whether they already were.
+    pub fn mark_results_recorded(&self) -> bool {
+        self.results_recorded.swap(true, Ordering::SeqCst)
+    }
+
     pub fn set_picture_state(&self, released: bool, mode: usize) {
         self.picture_released.store(released, Ordering::Relaxed);
         self.picture_mode.store(mode, Ordering::Relaxed);
@@ -142,8 +191,6 @@ pub enum GroupError {
     NotFound(String),
     #[error("group with name '{0}' already exists")]
     Duplicate(String),
-    #[error("question with index '{0}' does not exist")]
-    InvalidQuestion(usize),
 }
 
 impl ServerData {
@@ -196,54 +243,53 @@ impl ServerData {
         Ok(())
     }
 
-    pub async fn clear_group_answers(&self) {
+    pub fn clear_group_answers(&self) {
         self.groups.iter_mut().for_each(|mut group| {
             group.answer = None;
         })
     }
 
-    pub async fn reset_question_state_for_current_question(&self) {
+    fn reset_question_state_for(&self, question: Option<&Question>) {
         self.question_state.reset();
-        let current_question_idx = self.current_question.load(Ordering::Relaxed);
-        let questions = self.questions.lock().await;
-        let Some(question) = questions.get(current_question_idx) else {
+        let Some(question) = question else {
             return;
         };
 
-        if !question.has_display_picture() {
-            self.question_state
-                .set_picture_state(false, PICTURE_MODE_HIDDEN);
-            return;
-        }
-
-        if question.display_picture_requires_release() {
-            self.question_state
-                .set_picture_state(false, PICTURE_MODE_HIDDEN);
-            return;
-        }
-
-        if question.display_picture_starts_inline() {
-            self.question_state
-                .set_picture_state(true, PICTURE_MODE_INLINE);
-        } else {
-            self.question_state
-                .set_picture_state(true, PICTURE_MODE_HIDDEN);
+        // A picture that needs a release stays hidden until the admin shows it.
+        if question.has_display_picture() && !question.display_picture_requires_release() {
+            let mode = if question.display_picture_starts_inline() {
+                PICTURE_MODE_INLINE
+            } else {
+                PICTURE_MODE_HIDDEN
+            };
+            self.question_state.set_picture_state(true, mode);
         }
     }
 
-    pub async fn results(&self) -> Result<(), GroupError> {
-        let current_question_idx = self.current_question.load(Ordering::Relaxed);
-        let Some(question) = self.questions.lock().await.get(current_question_idx).cloned() else {
-            return Err(GroupError::InvalidQuestion(current_question_idx))
-        };
+    /// Makes `idx` the current question. This is the only place that changes
+    /// the current question.
+    ///
+    /// `questions` must be the content of the locked `self.questions` mutex.
+    /// It is passed in (instead of locked here) so that the index, the answers,
+    /// the question state and the version change in one step for everybody who
+    /// holds that lock while reading them.
+    pub fn switch_question(&self, questions: &[Question], idx: usize) {
+        self.current_question.store(idx, Ordering::SeqCst);
+        self.block_answer.store(false, Ordering::SeqCst);
+        self.clear_group_answers();
+        self.reset_question_state_for(questions.get(idx));
+        self.question_version.fetch_add(1, Ordering::SeqCst);
+    }
 
+    /// Awards the points for `question` to the groups, based on their answers.
+    pub fn record_results(&self, question: &Question) {
         let mut estimate_list: Vec<(f64, String)> = Vec::new();
         for mut entry in self.groups.iter_mut() {
             let answ = match &entry.answer {
                 Some(a) => a,
                 None => continue,
             };
-            match &question {
+            match question {
                 Question::Normal {
                     question: _,
                     answers: _,
@@ -308,7 +354,7 @@ impl ServerData {
             }
         }
         if !estimate_list.is_empty() {
-            estimate_list.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+            estimate_list.sort_by(|a, b| a.0.total_cmp(&b.0));
             let rank_points = [ESTIMATE_1_POINTS, ESTIMATE_2_POINTS, ESTIMATE_3_POINTS];
             let mut distinct_rank = 0usize;
             let mut points_for_rank = rank_points[0];
@@ -322,63 +368,13 @@ impl ServerData {
                     points_for_rank = rank_points[distinct_rank];
                 }
 
-                let est_group = estimate_list[i].1.clone();
-                self.add_group_points(est_group, points_for_rank)?;
+                // A group that was deleted in the meantime is skipped; the
+                // other groups still get their points.
+                if let Some(mut group) = self.groups.get_mut(&estimate_list[i].1) {
+                    group.add_score(points_for_rank);
+                }
             }
         }
-        Ok(())
-    }
-}
-
-/// A buffer holding events to be asynchronously progressed.
-/// Attributes are a queue to hold the events,
-/// a semaphore to gate access to the queue, and a boolean determining whether this buffer is disconnected or not.
-#[derive(Debug)]
-pub struct EventBuffer(ArrayQueue<Event>, Semaphore, AtomicBool);
-
-impl EventBuffer {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    pub fn with_capacity(cap: usize) -> Self {
-        log::info!("Created event queue with capacity {cap}");
-        Self(
-            ArrayQueue::new(cap),
-            Semaphore::new(0),
-            AtomicBool::new(false),
-        )
-    }
-
-    pub fn push(&self, event: Event) -> Result<(), Event> {
-        let res = self.0.push(event);
-        self.1.add_permits(1);
-        log::info!("Added event to queue. Now {} events stored", self.0.len());
-        res
-    }
-
-    pub async fn pop(&self) -> Event {
-        let permit = self.1.acquire().await.unwrap();
-        permit.forget();
-        log::info!(
-            "Removed event from queue. Now {} events stored",
-            self.0.len() - 1
-        );
-        self.0.pop().unwrap()
-    }
-
-    pub fn disconnect(&self) {
-        self.2.store(true, Ordering::Relaxed)
-    }
-
-    pub fn is_disconnected(&self) -> bool {
-        self.2.load(Ordering::Relaxed)
-    }
-}
-
-impl Default for EventBuffer {
-    fn default() -> Self {
-        Self::with_capacity(16)
     }
 }
 
@@ -767,8 +763,12 @@ impl FromStr for Question {
                 }
 
                 let solution = split[2]
+                    .trim()
                     .parse::<f64>()
                     .map_err(|_| "Estimate solution not a number")?;
+                if !solution.is_finite() {
+                    return Err("Estimate solution not a finite number");
+                }
 
                 Ok(Question::estimate_with_picture(question, solution, picture))
             }
@@ -911,18 +911,33 @@ impl Answer {
             Ok(values)
         }
         match s {
-            NORMAL_NAME => answer_string
-                .parse()
-                .map_err(|_| format!("could not parse answer \"{s}\" as a number"))
-                .map(Answer::Normal),
-            ESTIMATE_NAME => answer_string
-                .parse()
-                .map_err(|_| format!("could not parse answer \"{s}\" as a number"))
-                .map(Answer::Estimate),
+            NORMAL_NAME => match answer_string.trim().parse::<usize>() {
+                Ok(idx) if idx < 4 => Ok(Answer::Normal(idx)),
+                _ => Err(format!(
+                    "could not parse answer \"{answer_string}\" as an answer index"
+                )),
+            },
+            ESTIMATE_NAME => match answer_string.trim().parse::<f64>() {
+                Ok(value) if value.is_finite() => Ok(Answer::Estimate(value)),
+                _ => Err(format!(
+                    "could not parse answer \"{answer_string}\" as a number"
+                )),
+            },
             SORT_NAME => convert_letters_to_numbers(answer_string).map(Answer::Sort),
             ASSIGN_NAME => convert_letters_to_set(answer_string).map(Answer::Zuordnen),
             _ => Err(format!("invalid answer type: \"{s}\"")),
         }
+    }
+
+    /// Whether this is an answer to a question of the type of `question`.
+    pub fn matches_question(&self, question: &Question) -> bool {
+        matches!(
+            (self, question),
+            (Answer::Normal(_), Question::Normal { .. })
+                | (Answer::Estimate(_), Question::Estimate { .. })
+                | (Answer::Sort(_), Question::Sort { .. })
+                | (Answer::Zuordnen(_), Question::Zuordnen { .. })
+        )
     }
 }
 
@@ -966,24 +981,10 @@ impl Display for UpdateEvent {
     }
 }
 
-pub async fn send_event(server_data: &State<ServerData>, event: UpdateEvent) {
+/// Sends `event` to every connected client. Call this after the state the
+/// event announces has been changed, because clients react by fetching it.
+pub fn send_event(server_data: &ServerData, event: UpdateEvent) {
     info!("sending event with text: {event}");
-
-    // Delete event buffers that are disconnected
-    server_data
-        .client_event_buffers
-        .retain(|_, buf| !buf.is_disconnected());
-    // The buffers we want to delete since they don't seem to be connected anymore
-    let mut to_delete = vec![];
-    // Write the event into every event buffer available
-    for buffer in server_data.client_event_buffers.iter() {
-        if buffer.push(Event::data(event.to_string())).is_err() {
-            let id = buffer.key().clone();
-            warn!("event dropped for buffer {id}! the queue is full. assuming the client is not connected and deleting the buffer");
-            to_delete.push(id);
-        }
-    }
-    for name in to_delete {
-        server_data.client_event_buffers.remove(&name);
-    }
+    // An error only means that nobody is listening at the moment.
+    let _ = server_data.events.send(event);
 }

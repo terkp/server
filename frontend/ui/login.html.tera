@@ -7,12 +7,13 @@
     <link rel="stylesheet" href="ui/style.css" />
     <link rel="stylesheet" href="ui/login.css" />
     <title>Quiz</title>
+    <script type="text/javascript" src="/res/common.js"></script>
   </head>
   <body>
     <script type="text/javascript" src="ui/login.js"></script>
     <div id="loginContent">
       <label id="groupNameLoginLabel" for="groupNameInput">Gruppenname: </label>
-      <input id="groupNameInput" type="text" name="group_name" />
+      <input id="groupNameInput" type="text" name="group_name" maxlength="40" />
       <button id="buttonSend" type="button" onclick="sendGroupName()">
         Senden
       </button>

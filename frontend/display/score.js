@@ -1,22 +1,70 @@
-let letters = ["A", "B", "C", "D"];
+// The leaderboard page of the display. The server renders the scores into the
+// page; this script keeps them current and switches back to the question
+// when the leaderboard is turned off.
 
-if (typeof EventSource !== "undefined") {
-  //create an object, passing it the name and location of the server side script
-  var eSource = new EventSource("/events");
-  //detect message receipt
-  eSource.onmessage = function (event) {
-    //write the received data to the page
-    if (event.data === "toggle_leaderboard") {
-      window.location.href = "/display";
+// Same order as the server: highest score first, equal scores by name.
+function renderScores(groups) {
+  let names = Object.keys(groups).sort((a, b) => {
+    if (groups[a].score !== groups[b].score) {
+      return groups[b].score - groups[a].score;
     }
-  };
-} else {
-  document.getElementById("hallo").innerHTML =
-    "Whoops! Your browser doesn't receive server-sent events.";
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+
+  let scoresElement = document.getElementById("groupScores");
+  scoresElement.textContent = "";
+  for (const name of names) {
+    let row = document.createElement("div");
+    row.className = "groupScore";
+
+    let nameElement = document.createElement("span");
+    nameElement.className = "groupName";
+    nameElement.textContent = name;
+    row.appendChild(nameElement);
+    row.appendChild(document.createTextNode(": "));
+
+    let scoreElement = document.createElement("span");
+    scoreElement.className = "score";
+    scoreElement.textContent = groups[name].score;
+    row.appendChild(scoreElement);
+
+    scoresElement.appendChild(row);
+  }
 }
 
-/*
-1. Anzeige öffnen 
-2. EventStream dingens erstellen
-3. Wenn zb Lösung angezeigt werden soll, event an eventstream geben
- */
+// Each of these fetches from the server and applies the result; see
+// Quiz.createSync for how overlapping and failed requests are handled.
+// "groups" events arrive in bursts (one per answer); the scores are redrawn
+// in place instead of reloading the page for each of them.
+const updateScores = Quiz.createSync(Quiz.fetchGroups, renderScores, true);
+const resyncState = Quiz.createSync(
+  () => Quiz.fetchState(""),
+  (state) => {
+    if (!state.leaderboardShown) {
+      Quiz.navigateWhenReachable("/display", true);
+    }
+  }
+);
+
+function refreshEverything() {
+  resyncState();
+  updateScores();
+}
+
+const quizEvents = Quiz.connectEvents((data) => {
+  if (data === "groups") {
+    updateScores();
+  } else if (data === "toggle_leaderboard" || data === "resync") {
+    refreshEverything();
+  }
+}, refreshEverything);
+
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) {
+    quizEvents.reconnect();
+  }
+});
+// Safety net for everything that can make the page miss an event.
+setInterval(refreshEverything, 12000);
+
+refreshEverything();
