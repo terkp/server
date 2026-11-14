@@ -162,11 +162,10 @@ Quiz.connectEvents((data) => {
     // page is not reloaded blindly, so a reconnect does not blank the screen.
     refreshEverything();
   }
+  // Everything is fetched whenever the connection opens, which includes the
+  // first time (or after a short wait if it does not open; see
+  // Quiz.connectEvents).
 }, refreshEverything);
-
-// Everything is fetched again whenever the connection opens. This first fetch
-// does not wait for that, because opening can take long or fail.
-refreshEverything();
 
 // Safety net for everything that can make the page miss an event, and for a
 // server whose event stream cannot be reached at all.

@@ -6,8 +6,8 @@
 //
 // How the pages stay in sync: the events from /events are only hints that
 // something changed. The truth is fetched from the server (createSync), and
-// the pages fetch it when they load, and again whenever they may have missed
-// something: when the event connection opens, and periodically.
+// the pages fetch it again whenever they may have missed something: when the
+// event connection opens (or fails to open in time), and periodically.
 window.Quiz = (function () {
   "use strict";
 
@@ -19,6 +19,10 @@ window.Quiz = (function () {
   // src/main.rs). An open event connection that was silent for this long is
   // dead and gets replaced.
   var SILENCE_LIMIT_MS = 6000;
+
+  // How long a page waits for its event stream to open before it fetches its
+  // state without it (see connectEvents).
+  var OPEN_FALLBACK_MS = 2000;
 
   // fetch() with a timeout that also covers reading the body.
   // Resolves to { ok, status, text } for every HTTP response, including error
@@ -160,14 +164,16 @@ window.Quiz = (function () {
   }
 
   // Opens the event stream and keeps it open while the page is shown.
-  // `onMessage(data)` is called for every event, `onOpen(isReconnect)` every
+  // `onMessage(data)` is called for every event. `onOpen()` is called every
   // time a connection is established, which is the moment to fetch the state,
-  // because events may have been missed.
+  // because events may have been missed. Pages do not fetch their state on
+  // their own when they load; the first open does that.
   //
-  // A page must still fetch its state when it loads, without waiting for the
-  // first open: the stream can take long to open or never open (connection
-  // limit, a proxy that holds it back). The fetch on open then covers the
-  // events sent between that first fetch and the subscription.
+  // The stream can take long to open or never open (the browser's connection
+  // limit, a proxy that holds it back). So `onOpen()` is also called if no
+  // stream has opened within OPEN_FALLBACK_MS after the page loaded or was
+  // shown again. Normally the stream opens long before, and the state is
+  // fetched only once.
   //
   // Three things can go wrong with the connection:
   // - It is lost. The browser notices and reconnects by itself.
@@ -192,7 +198,7 @@ window.Quiz = (function () {
   function connectEvents(onMessage, onOpen, closeWhenHidden) {
     var source = null;
     var retryTimer = null;
-    var openCount = 0;
+    var fallbackTimer = null;
     var activity = Date.now();
     var pageLeft = false;
 
@@ -200,12 +206,26 @@ window.Quiz = (function () {
       alert("Whoops! Your browser doesn't receive server-sent events.");
       // Without events the page still gets its state once, and from the
       // periodic refresh of the page scripts.
-      setTimeout(function () {
-        if (onOpen) {
-          onOpen(false);
-        }
-      }, 0);
+      setTimeout(onOpen, 0);
       return;
+    }
+
+    function stopFallback() {
+      if (fallbackTimer !== null) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+    }
+
+    // Fetches the state anyway if no stream opens in time (see above).
+    function startFallback() {
+      stopFallback();
+      fallbackTimer = setTimeout(function () {
+        fallbackTimer = null;
+        if (!pageLeft) {
+          onOpen();
+        }
+      }, OPEN_FALLBACK_MS);
     }
 
     function close() {
@@ -229,10 +249,8 @@ window.Quiz = (function () {
       activity = Date.now();
       current.onopen = function () {
         activity = Date.now();
-        openCount += 1;
-        if (onOpen) {
-          onOpen(openCount > 1);
-        }
+        stopFallback();
+        onOpen();
       };
       current.onmessage = function (event) {
         activity = Date.now();
@@ -261,16 +279,23 @@ window.Quiz = (function () {
 
     window.addEventListener("pagehide", function () {
       pageLeft = true;
+      stopFallback();
       close();
     });
     window.addEventListener("pageshow", function (event) {
       pageLeft = false;
       if (event.persisted) {
         update();
+        startFallback();
       }
     });
     if (closeWhenHidden) {
-      document.addEventListener("visibilitychange", update);
+      document.addEventListener("visibilitychange", function () {
+        update();
+        if (document.visibilityState === "visible") {
+          startFallback();
+        }
+      });
     }
 
     setInterval(function () {
@@ -284,6 +309,8 @@ window.Quiz = (function () {
     }, 1000);
 
     update();
+    // Also for a page that loads hidden and therefore opens no stream yet.
+    startFallback();
   }
 
   var navigating = false;

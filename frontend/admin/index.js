@@ -34,32 +34,62 @@ function sendCommand(action, url, options, quietStatuses) {
     });
 }
 
-// The commands that depend on the current state (next question, leaderboard)
-// are only sent once the state is known. Without it they could not tell the
-// server which state they start from, and a double click would act twice.
-function stateIsKnown() {
-  if (latestState !== null) {
-    return true;
-  }
-  updateQuestionState();
-  alert(
-    "Der Zustand des Servers ist noch nicht geladen. Bitte gleich noch einmal versuchen."
-  );
-  return false;
+// True while a "next question" or "leaderboard" command is on its way, and
+// for COMMAND_COOLDOWN_MS after it. Clicks meanwhile are ignored. A double
+// click is ~150 ms apart, longer than a command takes on a local network, and
+// by then the page already shows the new state; without the pause the second
+// click would skip another question or switch the leaderboard back off.
+const COMMAND_COOLDOWN_MS = 1000;
+let nextQuestionRunning = false;
+let leaderboardRunning = false;
+
+function afterCooldown(done) {
+  setTimeout(done, COMMAND_COOLDOWN_MS);
 }
 
 function nextQuestion() {
-  if (!stateIsKnown()) {
+  if (nextQuestionRunning) {
     return;
   }
-  // Telling the server which question we are coming from makes a double
-  // click harmless: the second request no longer matches and is refused (409).
-  sendCommand(
-    "Nächste Frage",
-    "/questions/next?from=" + latestState.questionIndex,
-    {},
-    [409]
-  );
+  nextQuestionRunning = true;
+  // The page asks to go on from the question it shows. If the server is
+  // somewhere else by now (another admin tab, "Gehe zu Frage", a missed
+  // event), it refuses with 409 instead of skipping a question. Without a
+  // known state (the state request keeps failing) the request goes without
+  // `from`, and the server goes on from wherever it is.
+  const from = latestState === null ? null : latestState.questionIndex;
+  const url = "/questions/next" + (from === null ? "" : "?from=" + from);
+  sendCommand("Nächste Frage", url, {}, [409])
+    .then((result) => {
+      if (result === null || result.status !== 409) {
+        return;
+      }
+      // If the server is on the question after `from`, the quiz is where the
+      // admin wanted it (an earlier click or another tab got there first).
+      // Anything else is reported: nothing was switched.
+      return Quiz.fetchState("").then(
+        (state) => {
+          if (state.questionIndex !== from + 1) {
+            alert(
+              "Nicht weitergeschaltet: Die Frage hatte inzwischen gewechselt " +
+                "und steht jetzt auf Nummer " +
+                state.questionIndex +
+                "."
+            );
+          }
+        },
+        () => {
+          alert(
+            "Nicht weitergeschaltet: Die Frage hatte inzwischen gewechselt."
+          );
+        }
+      );
+    })
+    .then(() => {
+      afterCooldown(() => {
+        nextQuestionRunning = false;
+      });
+    });
 }
 
 function goToQuestion() {
@@ -313,15 +343,22 @@ function showAnswers() {
 }
 
 function toggleLeaderboard() {
-  if (!stateIsKnown()) {
+  if (leaderboardRunning) {
     return;
   }
-  // Send the wanted state instead of "toggle", so that a repeated request
-  // does not flip the display back.
-  sendCommand(
-    "Punktestand umschalten",
-    "/toggle_leaderboard?show=" + !latestState.leaderboardShown
-  );
+  leaderboardRunning = true;
+  // Send what the button says (the opposite of the state the page shows)
+  // instead of "toggle", so that a repeated request does not flip the
+  // display back. Without a known state the server toggles.
+  let url = "/toggle_leaderboard";
+  if (latestState !== null) {
+    url += "?show=" + !latestState.leaderboardShown;
+  }
+  sendCommand("Punktestand umschalten", url).then(() => {
+    afterCooldown(() => {
+      leaderboardRunning = false;
+    });
+  });
 }
 
 function showSolution() {
@@ -400,11 +437,10 @@ Quiz.connectEvents((data) => {
   } else {
     updateQuestionState();
   }
+  // Everything is fetched whenever the connection opens, which includes the
+  // first time (or after a short wait if it does not open; see
+  // Quiz.connectEvents).
 }, refreshEverything);
-
-// Everything is fetched again whenever the connection opens. This first fetch
-// does not wait for that, because opening can take long or fail.
-refreshEverything();
 
 // Safety net for everything that can make the page miss an event, and for a
 // server whose event stream cannot be reached at all.
