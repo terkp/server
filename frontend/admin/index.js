@@ -2,6 +2,9 @@ let currentQuestionData = null;
 let currentQuestionType = null;
 // The last answer of /questions/state, null until it was fetched once.
 let latestState = null;
+// The index of the question shown in the question table (from
+// /questions/current), null while none is shown.
+let shownQuestionIndex = null;
 const letters = ["A", "B", "C", "D", "E", "F"];
 
 // Sends a command to the server and afterwards refreshes everything shown on
@@ -54,10 +57,13 @@ function nextQuestion() {
   nextQuestionRunning = true;
   // The page asks to go on from the question it shows. If the server is
   // somewhere else by now (another admin tab, "Gehe zu Frage", a missed
-  // event), it refuses with 409 instead of skipping a question. Without a
-  // known state (the state request keeps failing) the request goes without
-  // `from`, and the server goes on from wherever it is.
-  const from = latestState === null ? null : latestState.questionIndex;
+  // event), it refuses with 409 instead of skipping a question. The state
+  // gives the question; until it has arrived (or while its request keeps
+  // failing), the number in the question table does. Only a page that shows
+  // no question at all sends no `from`; the server then goes on from wherever
+  // it is (with no question loaded or at the end, it does nothing).
+  const from =
+    latestState !== null ? latestState.questionIndex : shownQuestionIndex;
   const url = "/questions/next" + (from === null ? "" : "?from=" + from);
   sendCommand("Nächste Frage", url, {}, [409])
     .then((result) => {
@@ -67,25 +73,31 @@ function nextQuestion() {
       // If the server is on the question after `from`, the quiz is where the
       // admin wanted it (an earlier click or another tab got there first).
       // Anything else is reported: nothing was switched.
-      return Quiz.fetchState("").then(
-        (state) => {
-          if (state.questionIndex !== from + 1) {
+      return Quiz.fetchState("")
+        .then((state) => state.questionIndex)
+        .then(
+          (current) => {
+            if (current !== from + 1) {
+              alert(
+                "Nicht weitergeschaltet: Die Frage hatte inzwischen " +
+                  "gewechselt und steht jetzt auf Nummer " +
+                  current +
+                  "."
+              );
+            }
+          },
+          () => {
             alert(
-              "Nicht weitergeschaltet: Die Frage hatte inzwischen gewechselt " +
-                "und steht jetzt auf Nummer " +
-                state.questionIndex +
-                "."
+              "Nicht weitergeschaltet: Die Frage hatte inzwischen gewechselt."
             );
           }
-        },
-        () => {
-          alert(
-            "Nicht weitergeschaltet: Die Frage hatte inzwischen gewechselt."
-          );
-        }
-      );
+        );
     })
-    .then(() => {
+    .catch((error) => {
+      console.error(error);
+    })
+    .finally(() => {
+      // Whatever went wrong above, the button must not stay dead.
       afterCooldown(() => {
         nextQuestionRunning = false;
       });
@@ -185,6 +197,7 @@ function addRow(table, cells, cellTag) {
 function renderQuestion(data) {
   let questionElem = document.getElementById("currentQuestion");
   questionElem.textContent = "";
+  shownQuestionIndex = data === null ? null : data[0];
   if (data === null) {
     currentQuestionData = null;
     currentQuestionType = null;
@@ -354,11 +367,16 @@ function toggleLeaderboard() {
   if (latestState !== null) {
     url += "?show=" + !latestState.leaderboardShown;
   }
-  sendCommand("Punktestand umschalten", url).then(() => {
-    afterCooldown(() => {
-      leaderboardRunning = false;
+  sendCommand("Punktestand umschalten", url)
+    .catch((error) => {
+      console.error(error);
+    })
+    .finally(() => {
+      // Whatever went wrong above, the button must not stay dead.
+      afterCooldown(() => {
+        leaderboardRunning = false;
+      });
     });
-  });
 }
 
 function showSolution() {
