@@ -307,10 +307,10 @@ function startQuiz() {
     () => Quiz.fetchState(currentGroupName()),
     applyState
   );
-  // The state is fetched whenever the event connection opens, which includes
-  // the first time. Fetching it here as well would only make the first
-  // answer outdated before it arrives.
-  //
+  // The state is fetched now, and again whenever the event connection opens.
+  // Opening can take long or fail, and the page must not wait for it.
+  resyncState();
+
   // The connection is closed while the page is hidden (third argument), so
   // that background tabs do not use up the browser's connections. When the
   // player comes back, a new one is opened, which also fetches the state.

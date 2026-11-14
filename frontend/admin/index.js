@@ -34,14 +34,32 @@ function sendCommand(action, url, options, quietStatuses) {
     });
 }
 
+// The commands that depend on the current state (next question, leaderboard)
+// are only sent once the state is known. Without it they could not tell the
+// server which state they start from, and a double click would act twice.
+function stateIsKnown() {
+  if (latestState !== null) {
+    return true;
+  }
+  updateQuestionState();
+  alert(
+    "Der Zustand des Servers ist noch nicht geladen. Bitte gleich noch einmal versuchen."
+  );
+  return false;
+}
+
 function nextQuestion() {
+  if (!stateIsKnown()) {
+    return;
+  }
   // Telling the server which question we are coming from makes a double
   // click harmless: the second request no longer matches and is refused (409).
-  let url = "/questions/next";
-  if (latestState !== null) {
-    url += "?from=" + latestState.questionIndex;
-  }
-  sendCommand("Nächste Frage", url, {}, [409]);
+  sendCommand(
+    "Nächste Frage",
+    "/questions/next?from=" + latestState.questionIndex,
+    {},
+    [409]
+  );
 }
 
 function goToQuestion() {
@@ -295,13 +313,15 @@ function showAnswers() {
 }
 
 function toggleLeaderboard() {
+  if (!stateIsKnown()) {
+    return;
+  }
   // Send the wanted state instead of "toggle", so that a repeated request
   // does not flip the display back.
-  let url = "/toggle_leaderboard";
-  if (latestState !== null) {
-    url += "?show=" + !latestState.leaderboardShown;
-  }
-  sendCommand("Punktestand umschalten", url);
+  sendCommand(
+    "Punktestand umschalten",
+    "/toggle_leaderboard?show=" + !latestState.leaderboardShown
+  );
 }
 
 function showSolution() {
@@ -380,9 +400,11 @@ Quiz.connectEvents((data) => {
   } else {
     updateQuestionState();
   }
-  // Everything is fetched whenever the connection opens, which includes the
-  // first time, so there is no separate fetch when the page loads.
 }, refreshEverything);
+
+// Everything is fetched again whenever the connection opens. This first fetch
+// does not wait for that, because opening can take long or fail.
+refreshEverything();
 
 // Safety net for everything that can make the page miss an event, and for a
 // server whose event stream cannot be reached at all.

@@ -6,8 +6,8 @@
 //
 // How the pages stay in sync: the events from /events are only hints that
 // something changed. The truth is fetched from the server (createSync), and
-// the pages fetch it again whenever they may have missed something: when the
-// event connection opens, when the page becomes visible, and periodically.
+// the pages fetch it when they load, and again whenever they may have missed
+// something: when the event connection opens, and periodically.
 window.Quiz = (function () {
   "use strict";
 
@@ -164,9 +164,10 @@ window.Quiz = (function () {
   // time a connection is established, which is the moment to fetch the state,
   // because events may have been missed.
   //
-  // A page does not need to fetch its state when it loads: the first open
-  // does that, and it comes after the subscription, so no event can fall in
-  // between.
+  // A page must still fetch its state when it loads, without waiting for the
+  // first open: the stream can take long to open or never open (connection
+  // limit, a proxy that holds it back). The fetch on open then covers the
+  // events sent between that first fetch and the subscription.
   //
   // Three things can go wrong with the connection:
   // - It is lost. The browser notices and reconnects by itself.
