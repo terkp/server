@@ -6,7 +6,3 @@ address = "0.0.0.0"
 # (QuickEdit) blocks the server while it waits to print.
 # For debugging, set this to "normal" or start with ROCKET_LOG_LEVEL=normal.
 log_level = "critical"
-
-[default.limits]
-# Question files are sent as a string; Rocket's default limit is 8 KiB.
-string = "1 MiB"

@@ -5,10 +5,6 @@ const PICTURE_MODE_INLINE = 1;
 const PICTURE_MODE_TOP = 2;
 const PICTURE_MODE_FULLSCREEN = 3;
 
-// The picture/answer/solution state last received from the server, see
-// applyQuestionState.
-let lastStateSignature = null;
-
 function showSolutionContent() {
   // The waiting page has no solution element.
   let solution = document.getElementById("solution");
@@ -56,7 +52,7 @@ function applyQuestionState(state) {
     return;
   }
   if (state.leaderboardShown) {
-    Quiz.navigateWhenReachable("/display/leaderboard", true);
+    Quiz.navigate("/display/leaderboard");
     return;
   }
 
@@ -71,23 +67,6 @@ function applyQuestionState(state) {
     pictureMode = PICTURE_MODE_HIDDEN;
   }
   applyPictureMode(pictureMode);
-
-  // Every change of these values is announced by an event. If one shows up
-  // here although no event arrived recently, the event connection is dead
-  // without the browser having noticed, so it is replaced.
-  let signature = [
-    questionState.answerIsShown,
-    questionState.solutionIsShown,
-    pictureMode,
-  ].join();
-  if (
-    lastStateSignature !== null &&
-    lastStateSignature !== signature &&
-    Date.now() - quizEvents.lastActivity() > 3000
-  ) {
-    quizEvents.reconnect();
-  }
-  lastStateSignature = signature;
 }
 
 function answerToString(answer) {
@@ -154,7 +133,7 @@ function refreshEverything() {
   updateGroups();
 }
 
-const quizEvents = Quiz.connectEvents((data) => {
+Quiz.connectEvents((data) => {
   // The events with a visible effect are applied right away. The state is
   // fetched as well, which also covers events that were missed before.
   if (data === "show_solution") {
@@ -183,17 +162,13 @@ const quizEvents = Quiz.connectEvents((data) => {
     // page is not reloaded blindly, so a reconnect does not blank the screen.
     refreshEverything();
   }
+  // Everything is fetched whenever the connection opens, which includes the
+  // first time, so there is no separate fetch when the page loads.
 }, refreshEverything);
 
-window.addEventListener("pageshow", (event) => {
-  if (event.persisted) {
-    quizEvents.reconnect();
-  }
-});
-// Safety net for everything that can make the page miss an event.
+// Safety net for everything that can make the page miss an event, and for a
+// server whose event stream cannot be reached at all.
 setInterval(refreshEverything, 12000);
-
-refreshEverything();
 
 /*
 1. Anzeige öffnen

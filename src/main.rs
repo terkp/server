@@ -1,22 +1,30 @@
 use std::{
     path::{Path, PathBuf},
     sync::atomic::Ordering,
-    time::Duration,
+    time::{Duration, UNIX_EPOCH},
 };
 
 use rocket::{
     fairing::{Fairing, Info, Kind},
     fs::NamedFile,
     http::{Header, Status},
-    response::stream::{Event, EventStream},
-    tokio::{select, sync::broadcast::error::RecvError},
+    response::{
+        self,
+        stream::{Event, EventStream},
+        Responder,
+    },
+    tokio::{
+        select,
+        sync::broadcast::error::RecvError,
+        time::{interval, MissedTickBehavior},
+    },
     Request, Response, Shutdown, State,
 };
 use rocket_dyn_templates::{context, Template};
 use server_data::{send_event, UpdateEvent};
 use simplelog::{ConfigBuilder, TermLogger};
 
-use crate::server_data::{Question, ServerData};
+use crate::server_data::{Question, ServerData, MAX_GROUP_NAME_CHARS};
 
 #[macro_use]
 extern crate rocket;
@@ -27,42 +35,55 @@ mod group;
 mod questions;
 mod server_data;
 
-/// How long browsers may reuse a picture without asking again. `NamedFile`
-/// sends no validators, so without this every page load downloads every
-/// picture again.
-const CACHE_PICTURES: &str = "public, max-age=3600";
-/// Scripts, styles and everything else are always fetched fresh, so a changed
-/// script is never mixed with an old page.
-const CACHE_NOTHING: &str = "no-cache";
+/// How often every event stream sends a "ping" event. The pages treat a
+/// connection that stays silent for a few of these intervals as dead and open
+/// a new one (`SILENCE_LIMIT_MS` in frontend/res/common.js, keep it at about
+/// three times this value).
+const EVENT_PING_INTERVAL: Duration = Duration::from_secs(2);
 
-/// A file together with a `Cache-Control` header.
-#[derive(Responder)]
+/// A static file that browsers may keep but have to revalidate on every use.
+///
+/// `NamedFile` alone sends nothing a browser could revalidate with, so every
+/// page load would download every picture again. With the `ETag` an unchanged
+/// file costs one small 304 answer, and a file that was replaced under the
+/// same name is picked up immediately.
 struct StaticFile {
     file: NamedFile,
-    cache_control: Header<'static>,
+    etag: String,
 }
 
 impl StaticFile {
     async fn open(path: PathBuf) -> Option<Self> {
-        let is_picture = path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .map(|extension| extension.to_ascii_lowercase())
-            .is_some_and(|extension| {
-                matches!(
-                    extension.as_str(),
-                    "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "ico"
-                )
-            });
-        let cache_control = if is_picture {
-            CACHE_PICTURES
+        let file = NamedFile::open(path).await.ok()?;
+        let metadata = file.file().metadata().await.ok()?;
+        // Size and modification time identify the content well enough.
+        let modified = metadata
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+            .map_or(0, |duration| duration.as_nanos());
+        let etag = format!("\"{:x}-{:x}\"", metadata.len(), modified);
+        Some(Self { file, etag })
+    }
+}
+
+impl<'r> Responder<'r, 'static> for StaticFile {
+    fn respond_to(self, request: &'r Request<'_>) -> response::Result<'static> {
+        let browser_has_it = request
+            .headers()
+            .get("If-None-Match")
+            .flat_map(|value| value.split(','))
+            .map(|tag| tag.trim().trim_start_matches("W/"))
+            .any(|tag| tag == "*" || tag == self.etag);
+
+        let mut response = if browser_has_it {
+            Response::build().status(Status::NotModified).finalize()
         } else {
-            CACHE_NOTHING
+            self.file.respond_to(request)?
         };
-        Some(Self {
-            file: NamedFile::open(path).await.ok()?,
-            cache_control: Header::new("Cache-Control", cache_control),
-        })
+        response.set_header(Header::new("ETag", self.etag));
+        response.set_header(Header::new("Cache-Control", "no-cache"));
+        Ok(response)
     }
 }
 
@@ -74,13 +95,6 @@ async fn files(file: PathBuf) -> Option<StaticFile> {
 #[get("/pictures/<file..>")]
 async fn picture_files(file: PathBuf) -> Option<StaticFile> {
     StaticFile::open(Path::new("pictures").join(file)).await
-}
-
-/// A cheap request the pages use to find out whether the server is reachable
-/// before they reload or navigate.
-#[get("/ping")]
-fn ping() -> &'static str {
-    "pong"
 }
 
 /// I am stupid and don't know how webdev works so this is here.
@@ -133,6 +147,9 @@ fn setup_logger() {
 /// Events are only hints ("something changed"); the pages fetch the actual
 /// state from `/questions/state` and `/groups/get`. A client that missed
 /// events is sent "resync" and then does the same.
+///
+/// "ping" events are sent all the time, so that a page can tell a quiet
+/// connection from a dead one (see `EVENT_PING_INTERVAL`).
 #[get("/events")]
 pub fn events(server_data: &State<ServerData>, mut shutdown: Shutdown) -> EventStream![] {
     // Subscribe here and not inside the stream: the stream body only starts
@@ -142,6 +159,8 @@ pub fn events(server_data: &State<ServerData>, mut shutdown: Shutdown) -> EventS
     EventStream! {
         // Tell the browser to reconnect quickly after a lost connection.
         yield Event::retry(Duration::from_secs(1));
+        let mut ping = interval(EVENT_PING_INTERVAL);
+        ping.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             let event = select! {
                 message = receiver.recv() => match message {
@@ -150,6 +169,7 @@ pub fn events(server_data: &State<ServerData>, mut shutdown: Shutdown) -> EventS
                     Err(RecvError::Lagged(_)) => Event::data("resync"),
                     Err(RecvError::Closed) => break,
                 },
+                _ = ping.tick() => Event::data("ping"),
                 _ = &mut shutdown => break,
             };
             yield event;
@@ -167,7 +187,6 @@ fn rocket() -> _ {
             routes![
                 picture_files,
                 files,
-                ping,
                 events,
                 show_ui,
                 show_login,
@@ -194,7 +213,6 @@ fn rocket() -> _ {
                 questions::current_question,
                 questions::current_question_state,
                 questions::next_question,
-                questions::results,
                 questions::show_answers,
                 questions::show_points,
                 questions::show_solution,
@@ -323,7 +341,10 @@ pub async fn show_ui(server_data: &State<ServerData>) -> Template {
 
 #[get("/login")]
 pub async fn show_login() -> Template {
-    Template::render("ui/login", context! {})
+    Template::render(
+        "ui/login",
+        context! { max_group_name_chars: MAX_GROUP_NAME_CHARS },
+    )
 }
 
 /// Switches the display between the question and the leaderboard.
@@ -331,7 +352,14 @@ pub async fn show_login() -> Template {
 /// `show` is the wanted state. With it the request can be repeated safely;
 /// without it the state is flipped.
 #[get("/toggle_leaderboard?<show>")]
-pub async fn toggle_leaderboard(server_data: &State<ServerData>, show: Option<bool>) -> Status {
+pub async fn toggle_leaderboard(server_data: &State<ServerData>, show: Option<&str>) -> Status {
+    // Parsed here and not by Rocket: Rocket turns a value that does not parse
+    // into `None`, which would flip the state instead of refusing.
+    let show = match show.map(str::parse::<bool>) {
+        None => None,
+        Some(Ok(show)) => Some(show),
+        Some(Err(_)) => return Status::BadRequest,
+    };
     match show {
         Some(show) => server_data.leaderboard_shown.store(show, Ordering::SeqCst),
         None => {

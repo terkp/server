@@ -9,20 +9,16 @@
 
 let pictureFullscreenActive = false;
 
-// True once answers are no longer accepted for this question. Assigned on
-// `window` on purpose so that it is a real global for the other scripts.
-// Until the server state is known it is false: a failed state request must
-// not keep the send button disabled.
-window.quizLocked = false;
+// True once answers are no longer accepted for this question. Until the
+// server state is known it is false: a failed state request must not keep
+// the send button disabled.
+let quizLocked = false;
 
 // True from sending an answer until the server state was fetched again
 // afterwards. Sending is disabled meanwhile.
 let answerRequestInFlight = false;
 
 let resyncState = function () {};
-let quizEvents = null;
-// The lock/solution state last received from the server, see applyState.
-let lastStateSignature = null;
 
 function currentGroupName() {
   return localStorage.getItem("group_name");
@@ -41,12 +37,11 @@ function updateSendButton() {
   }
   const complete =
     typeof hasCompleteAnswer === "function" && hasCompleteAnswer();
-  button.disabled =
-    window.quizLocked === true || answerRequestInFlight || !complete;
+  button.disabled = quizLocked || answerRequestInFlight || !complete;
 }
 
 function setLocked(locked) {
-  window.quizLocked = locked;
+  quizLocked = locked;
   updateSendButton();
 }
 
@@ -82,7 +77,7 @@ function showServerAnswer(answer) {
 
 function goToLogin() {
   localStorage.removeItem("group_name");
-  Quiz.navigateWhenReachable("/login", true);
+  Quiz.navigate("/login");
 }
 
 // Brings the page in line with the state fetched from the server.
@@ -115,23 +110,6 @@ function applyState(state) {
     showServerAnswer(state.answer);
   }
   updatePictureFullscreenButton();
-
-  // Every change of these values is announced by an event. If one shows up
-  // here although no event arrived recently, the event connection is dead
-  // without the browser having noticed, so it is replaced.
-  const signature = [
-    questionState.answerIsShown,
-    questionState.solutionIsShown,
-    state.answersBlocked,
-  ].join();
-  if (
-    lastStateSignature !== null &&
-    lastStateSignature !== signature &&
-    Date.now() - quizEvents.lastActivity() > 3000
-  ) {
-    quizEvents.reconnect();
-  }
-  lastStateSignature = signature;
 }
 
 // Sends an answer for the group.
@@ -148,7 +126,14 @@ function submitAnswer(type, answerString, displayText, onSuccess) {
   answerRequestInFlight = true;
   updateSendButton();
 
-  const version = Number(Quiz.pageVersion());
+  // A page without a version sends none, and the server then skips the
+  // check. (Number(null) and Number("") would both be 0, which the server
+  // would refuse as an outdated version every time.)
+  const pageVersion = Quiz.pageVersion();
+  const version =
+    pageVersion === null || pageVersion.trim() === ""
+      ? NaN
+      : Number(pageVersion);
   Quiz.fetchWithTimeout(
     "/groups/set_answer",
     {
@@ -322,29 +307,19 @@ function startQuiz() {
     () => Quiz.fetchState(currentGroupName()),
     applyState
   );
-  quizEvents = Quiz.connectEvents(handleServerEvent, () => resyncState());
+  // The state is fetched whenever the event connection opens, which includes
+  // the first time. Fetching it here as well would only make the first
+  // answer outdated before it arrives.
+  //
+  // The connection is closed while the page is hidden (third argument), so
+  // that background tabs do not use up the browser's connections. When the
+  // player comes back, a new one is opened, which also fetches the state.
+  Quiz.connectEvents(handleServerEvent, () => resyncState(), true);
 
-  // A phone that slept or changed the network may hold a dead connection.
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-      quizEvents.reconnect();
-      resyncState();
-    }
-  });
-  window.addEventListener("pageshow", (event) => {
-    if (event.persisted) {
-      quizEvents.reconnect();
-      resyncState();
-    }
-  });
-  // Safety net for everything else that can make the page miss an event.
-  setInterval(() => {
-    if (document.visibilityState === "visible") {
-      resyncState();
-    }
-  }, 12000);
-
-  resyncState();
+  // Safety net for everything that can make the page miss an event, and for
+  // a server whose event stream cannot be reached at all. It runs for hidden
+  // pages too, in case a browser reports a page as hidden that is not.
+  setInterval(() => resyncState(), 12000);
 }
 
 if (currentGroupName() === null) {

@@ -13,7 +13,7 @@
     <script type="text/javascript" src="ui/login.js"></script>
     <div id="loginContent">
       <label id="groupNameLoginLabel" for="groupNameInput">Gruppenname: </label>
-      <input id="groupNameInput" type="text" name="group_name" maxlength="40" />
+      <input id="groupNameInput" type="text" name="group_name" maxlength="{{ max_group_name_chars }}" />
       <button id="buttonSend" type="button" onclick="sendGroupName()">
         Senden
       </button>

@@ -41,7 +41,7 @@ const resyncState = Quiz.createSync(
   () => Quiz.fetchState(""),
   (state) => {
     if (!state.leaderboardShown) {
-      Quiz.navigateWhenReachable("/display", true);
+      Quiz.navigate("/display");
     }
   }
 );
@@ -51,20 +51,16 @@ function refreshEverything() {
   updateScores();
 }
 
-const quizEvents = Quiz.connectEvents((data) => {
+Quiz.connectEvents((data) => {
   if (data === "groups") {
     updateScores();
   } else if (data === "toggle_leaderboard" || data === "resync") {
     refreshEverything();
   }
+  // Everything is fetched whenever the connection opens, which includes the
+  // first time, so there is no separate fetch when the page loads.
 }, refreshEverything);
 
-window.addEventListener("pageshow", (event) => {
-  if (event.persisted) {
-    quizEvents.reconnect();
-  }
-});
-// Safety net for everything that can make the page miss an event.
+// Safety net for everything that can make the page miss an event, and for a
+// server whose event stream cannot be reached at all.
 setInterval(refreshEverything, 12000);
-
-refreshEverything();

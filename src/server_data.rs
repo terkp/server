@@ -87,13 +87,15 @@ pub fn normalize_group_name(name: &str) -> &str {
 
 /// Normalizes a name for a new group and checks that it is usable.
 /// The error text is shown to the player.
-pub fn validate_group_name(name: &str) -> Result<&str, &'static str> {
+pub fn validate_group_name(name: &str) -> Result<&str, String> {
     let name = normalize_group_name(name);
     if name.is_empty() {
-        return Err("Der Gruppenname darf nicht leer sein.");
+        return Err("Der Gruppenname darf nicht leer sein.".to_owned());
     }
     if name.chars().count() > MAX_GROUP_NAME_CHARS {
-        return Err("Der Gruppenname darf höchstens 40 Zeichen lang sein.");
+        return Err(format!(
+            "Der Gruppenname darf höchstens {MAX_GROUP_NAME_CHARS} Zeichen lang sein."
+        ));
     }
     Ok(name)
 }
@@ -132,10 +134,6 @@ impl QuestionState {
 
     pub fn solution_is_shown(&self) -> bool {
         self.solution_is_shown.load(Ordering::Relaxed)
-    }
-
-    pub fn results_recorded(&self) -> bool {
-        self.results_recorded.load(Ordering::Relaxed)
     }
 
     pub fn set_results_recorded(&self, recorded: bool) {
@@ -875,6 +873,14 @@ impl Answer {
                     'c' => numbers[i] = 2,
                     'd' => numbers[i] = 3,
                     _ => return Err(format!("invalid letter: {letter}")),
+                }
+            }
+
+            // Every item must appear exactly once in an order.
+            let mut seen = [false; 4];
+            for &number in &numbers {
+                if std::mem::replace(&mut seen[number], true) {
+                    return Err(format!("\"{letters}\" uses a letter twice"));
                 }
             }
 

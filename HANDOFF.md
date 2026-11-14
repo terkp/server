@@ -201,7 +201,9 @@ None is a must-fix for the network goal. The one worth reconsidering is the hidd
 
 ## Implementation status
 
-Implemented on 2026-11-13: P1 to P10, the review's corrections 1 to 18, and A1, A3, A4, A5 and A6. Of A2 only the caching half is done.
+Implemented on 2026-11-13 (commit 03d7142): P1 to P10, the review's corrections 1 to 18, and A1, A3, A4, A5 and A6. Of A2 only the caching half is done.
+
+On 2026-11-14 a review of 03d7142 reported ten low-severity findings. All ten were checked against the code, found correct and fixed (working tree, not committed). The list below describes the code after those fixes.
 
 ### Where the code differs from the fix plan
 
@@ -210,23 +212,37 @@ Implemented on 2026-11-13: P1 to P10, the review's corrections 1 to 18, and A1, 
 - **`/questions/state`** has no `format` and also returns `groupName`, `answersBlocked`, `leaderboardShown`, `questionIndex` and `questionCount`.
 - **`/questions/next`** takes an optional `?from=<index>` and answers 409 if that is not the current question. It returns a plain status instead of redirecting to `/questions/current`.
 - **`/toggle_leaderboard`** takes an optional `?show=true|false`.
-- **`/questions/show_solution`** also closes answering, and returns 404 when there is no current question.
-- **New route `/ping`**, used by the pages before they reload or navigate.
-- **`common.js`** exposes one global, `Quiz`. Besides the planned helpers it has `createSync` (single-flight fetch-and-apply with retry), which all pages use for the state and the group list.
+- **Malformed `from` and `show` values are refused with 400.** Both are parsed by hand: Rocket turns an optional query value that does not parse into "missing", which made `next?from=abc` advance without the guard and `toggle_leaderboard?show=maybe` flip the display.
+- **Sort answers must use each letter once** (`AABB` is a 400).
+- **`/questions/show_solution`** also closes answering, and returns 404 when there is no current question. The duplicate route `/questions/results` is removed; no page used it.
+- **`/questions/load`** reads its body with its own 1 MiB limit and answers 413 above it. All other endpoints keep Rocket's default of 8 KiB; `Rocket.toml` no longer raises the `string` limit.
+- **"ping" events**: every event stream sends a `ping` event every 2 s. A page whose open connection is silent for 6 s replaces it. This is how a connection that died without an error (phone sleep, access-point change) is noticed. The two constants are `EVENT_PING_INTERVAL` in `src/main.rs` and `SILENCE_LIMIT_MS` in `frontend/res/common.js`.
+- **No reachability probe**: the plan's `navigateWhenReachable` is `Quiz.navigate`. Pages only navigate right after a request to the server has succeeded, so the separate probe and its `/ping` route never ran and are gone.
+- **A page that is not shown holds no connection.** Browsers allow 6 connections per server (the server speaks HTTP/1.1), shared by all tabs and by pages kept in the back/forward cache. Six open event streams block every further request, page loads included; this was reproduced with six quiz tabs. Now every page closes its stream when it is left (`pagehide`) and reopens it if the browser brings it back from its cache. The player page also closes it while hidden (background tab, locked phone) and reopens it when shown, which fetches the state again. The display and admin page keep theirs, because they must stay current behind other windows. A hidden player page still asks for the state every 12 s.
+- **State requests are retried until one succeeds**, also on a hidden page. Before, a hidden page gave up after one failure and stayed on the old question until the next event.
+- **State is fetched when the event connection opens**, not additionally at page load. That is one state request per page load, and it comes after the subscription, so no event falls in between.
+- **`common.js`** exposes one global, `Quiz`. Besides the planned helpers it has `createSync` (single-flight fetch-and-apply with retry), which all pages use for the state and the group list. `escapeHtml` is not in it: every page inserts names as text.
 - **Reload guard**: a page reloads at most once per question version within 10 s (not strictly once), so a page can never get stuck on an old question.
-- **Caching**: pictures and other image files are sent with `Cache-Control: public, max-age=3600`, everything else with `no-cache`.
+- **Caching**: every static file and picture is sent with an `ETag` (size and modification time) and `Cache-Control: no-cache`. Browsers keep the file but ask each time; an unchanged file costs a 304 without body, and a file replaced under the same name is picked up at once.
 - **`Rocket.toml`** sets `log_level = "critical"`. Use `ROCKET_LOG_LEVEL=normal` to see requests again.
 
 ### Tested
 
 `cargo check` passes without warnings. The server was built and run under WSL (Linux), and the pages were driven in headless Chrome: answering for all four question types, reveal, double-clicked "next", going past the last question, leaderboard, picture modes, group deletion, login, a failed answer submission, an answer sent from a stale page, and a server restart with the pages open.
 
+After the fixes of 2026-11-14 the same flows were run again (except going past the last question, group deletion and the failed and stale submissions, whose code did not change), plus: one state request per page load, pings causing no requests, a picture being revalidated instead of downloaded again, the upload limits, and a frozen server process (connections open but silent), after which both the player page and the display replaced their connection within about 7 s and received events again.
+
+On Windows (Rust 1.100.0, Windows SDK 10.0.26100) `cargo check` and `cargo build` pass without warnings. On 2026-11-14 the Windows build passed two test suites (kept outside the repository):
+
+- **API suite, 212 checks**: static files and ETags, path traversal, loading and every parse error, group names, answer validation for all types, all scoring rules, navigation limits, pictures, leaderboard, event order for 60 clients, ping timing, a stuck client getting "resync" while a reading client still gets all 40 000 events, 60 groups answering at once (median 14 ms with 60 event clients), and races of answers against "show answers" and "next".
+- **Browser suite in headless Chrome, 125 checks**: player, display and admin page together through all question types, the admin file upload, pictures on display and phone, leaderboard, a page being hidden and shown again, sending while offline, an answer from a stale page, the end of the quiz, deleted group and login, a frozen server process (all three pages replaced their silent connection), and a server restart. (An earlier run was reported as "107 checks": the result list had been cut off at about 4 100 characters, so its last checks, the freeze and restart phases, were not visible. The run after the connection fixes was read in full.)
+- **Connection checks in headless Chrome, 23 checks**: nine quiz tabs open at once (the seventh used to hang), switching back to an old tab, a background tab catching up, "Gruppe Ändern" and back/forward repeatedly (pages restored from the browser's cache keep working and hold no connection), and a hidden page with a failed state request.
+- **One tab against the old version (commit 40d8e38)**, to look for a state that survives a reload: none was found. The old page missed the question change in 6 of 6 rounds after 60 simultaneous answers and broke on a connection loss, but one manual reload always fixed it.
+
 ### Not tested
 
-- **`cargo build` on Windows.** On the computer where this was implemented it fails at link time because the Windows SDK is not installed (`bcrypt.lib` not found). That is the machine, not the code; run it on a computer with the SDK.
-- Real phones and real WiFi: phone sleep, changing access points, Safari on iOS. The reconnect logic for these cases (reconnect on `visibilitychange`, resync every 12 s) has only been read, not exercised.
-- Load with many phones at once.
-- The `"resync"` event that a client gets after falling more than 256 events behind.
+- Real phones and real WiFi: phone sleep, changing access points, Safari on iOS. A dead connection was only simulated by freezing the server process on the same machine.
+- Load with real phones. The API suite simulated 60 groups and 60 event connections from the same machine.
 
 ### Still open
 

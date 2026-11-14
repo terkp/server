@@ -3,15 +3,45 @@ use crate::server_data::{
     PICTURE_MODE_FULLSCREEN, PICTURE_MODE_HIDDEN, PICTURE_MODE_INLINE, PICTURE_MODE_TOP,
 };
 
-use rocket::{http::Status, serde::json::Json, State};
+use rocket::{
+    data::{Data, ToByteUnit},
+    http::Status,
+    serde::json::Json,
+    State,
+};
 use serde::Serialize;
 use std::sync::atomic::Ordering;
+
+/// The largest question file that is accepted. This route reads its body with
+/// its own limit, so the small default limit for request bodies stays in
+/// place for the endpoints that players can reach.
+const QUESTION_FILE_LIMIT_MIB: u64 = 1;
 
 #[post("/load", format = "text/plain", data = "<questions>")]
 pub async fn load_questions(
     server_data: &State<ServerData>,
-    questions: String,
+    questions: Data<'_>,
 ) -> (Status, String) {
+    let questions = match questions
+        .open(QUESTION_FILE_LIMIT_MIB.mebibytes())
+        .into_string()
+        .await
+    {
+        Ok(questions) if questions.is_complete() => questions.into_inner(),
+        Ok(_) => {
+            return (
+                Status::PayloadTooLarge,
+                format!("the question file is larger than {QUESTION_FILE_LIMIT_MIB} MiB"),
+            )
+        }
+        Err(e) => {
+            return (
+                Status::BadRequest,
+                format!("the question file cannot be read as text: {e}"),
+            )
+        }
+    };
+
     // Editors on Windows like to put a byte order mark in front of the file.
     let text = questions.strip_prefix('\u{feff}').unwrap_or(&questions);
 
@@ -124,7 +154,14 @@ pub async fn current_question_state(
 /// wrong, nothing happens, so a double click or a retried request cannot skip
 /// a question.
 #[get("/next?<from>")]
-pub async fn next_question(server_data: &State<ServerData>, from: Option<usize>) -> Status {
+pub async fn next_question(server_data: &State<ServerData>, from: Option<&str>) -> Status {
+    // Parsed here and not by Rocket: Rocket turns a value that does not parse
+    // into `None`, which would silently drop the protection.
+    let from = match from.map(str::parse::<usize>) {
+        None => None,
+        Some(Ok(from)) => Some(from),
+        Some(Err(_)) => return Status::BadRequest,
+    };
     {
         let questions = server_data.questions.lock().await;
         let current_question_idx = server_data.current_question.load(Ordering::SeqCst);
@@ -171,7 +208,8 @@ pub async fn set_question(
 }
 
 /// Awards the points for the current question (once) and shows the solution.
-async fn reveal_solution(server_data: &State<ServerData>) -> Status {
+#[get("/show_solution")]
+pub async fn show_solution(server_data: &State<ServerData>) -> Status {
     // Holding the lock for the whole operation keeps a concurrent question
     // change or a second reveal from interleaving with the scoring.
     let questions = server_data.questions.lock().await;
@@ -195,15 +233,6 @@ async fn reveal_solution(server_data: &State<ServerData>) -> Status {
     Status::Ok
 }
 
-#[get("/results")]
-pub async fn results(server_data: &State<ServerData>) -> Status {
-    reveal_solution(server_data).await
-}
-
-#[get("/show_solution")]
-pub async fn show_solution(server_data: &State<ServerData>) -> Status {
-    reveal_solution(server_data).await
-}
 
 #[get("/allow_results_entry")]
 pub async fn allow_results_entry(server_data: &State<ServerData>) -> Status {

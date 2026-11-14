@@ -15,17 +15,10 @@ window.Quiz = (function () {
   // Minimum time between two automatic reloads for the same question version.
   var RELOAD_THROTTLE_MS = 10000;
 
-  function escapeHtml(value) {
-    return String(value).replace(/[&<>"']/g, function (character) {
-      return {
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;",
-      }[character];
-    });
-  }
+  // The server sends a "ping" event every 2 s (EVENT_PING_INTERVAL in
+  // src/main.rs). An open event connection that was silent for this long is
+  // dead and gets replaced.
+  var SILENCE_LIMIT_MS = 6000;
 
   // fetch() with a timeout that also covers reading the body.
   // Resolves to { ok, status, text } for every HTTP response, including error
@@ -101,8 +94,10 @@ window.Quiz = (function () {
   //   old answer never overwrites what a newer event already put on the page.
   //   With `applyOutdated` the outdated result is applied anyway before
   //   fetching again (for data that changes in bursts, like the group list).
-  // - Failed requests are retried with a growing delay while the page is
-  //   visible. A hidden page stops and relies on the next request.
+  // - Failed requests are retried with a growing delay (at most 5 s) until
+  //   one succeeds. A hidden page retries too: nothing else is guaranteed to
+  //   start a new request later, and browsers slow down the timers of hidden
+  //   pages on their own.
   //
   // `refresh.whenApplied()` requests a refresh and resolves with the result
   // once it was applied.
@@ -139,10 +134,6 @@ window.Quiz = (function () {
           });
         },
         function () {
-          if (document.visibilityState === "hidden") {
-            running = false;
-            return;
-          }
           setTimeout(function () {
             attempt(Math.min(delay * 2, 5000));
           }, delay);
@@ -168,35 +159,55 @@ window.Quiz = (function () {
     return refresh;
   }
 
-  // Opens the event stream. `onMessage(data)` is called for every event,
-  // `onOpen(isReconnect)` every time a connection is established, which is
-  // the moment to fetch the state, because events may have been missed.
+  // Opens the event stream and keeps it open while the page is shown.
+  // `onMessage(data)` is called for every event, `onOpen(isReconnect)` every
+  // time a connection is established, which is the moment to fetch the state,
+  // because events may have been missed.
   //
-  // The browser reconnects by itself after a lost connection. It gives up
-  // (readyState CLOSED) when the server answers with an error, for example
-  // while it is restarting; then a new EventSource is created after 2 s.
+  // A page does not need to fetch its state when it loads: the first open
+  // does that, and it comes after the subscription, so no event can fall in
+  // between.
   //
-  // Returns { reconnect, lastActivity }. `reconnect()` replaces the connection
-  // with a new one; use it when the connection may be dead without the browser
-  // noticing (after the phone slept or changed the access point).
-  // `lastActivity()` is the time of the last open or message.
-  function connectEvents(onMessage, onOpen) {
+  // Three things can go wrong with the connection:
+  // - It is lost. The browser notices and reconnects by itself.
+  // - The server answers with an error, for example while it is restarting.
+  //   The browser then gives up (readyState CLOSED), and a new EventSource is
+  //   created after 2 s.
+  // - It is dead without the browser noticing (the phone slept or changed the
+  //   access point). The server's "ping" events stop arriving then, and after
+  //   SILENCE_LIMIT_MS the connection is replaced. Pings are not passed on to
+  //   `onMessage`.
+  //
+  // A page that is not shown must not hold a connection. Browsers allow only
+  // 6 connections per server, shared by all tabs and by the pages they keep
+  // in the back/forward cache. Six open streams block every other request to
+  // the server, page loads included, until one of them is closed.
+  // - A page that is left closes its stream (pagehide). If the browser brings
+  //   it back from the back/forward cache, a new one is opened (pageshow).
+  // - With `closeWhenHidden` the stream is also closed while the page is
+  //   hidden (background tab, locked phone) and opened again when it is
+  //   shown. The player page uses this. The display and the admin page keep
+  //   their stream, because they have to stay current behind other windows.
+  function connectEvents(onMessage, onOpen, closeWhenHidden) {
     var source = null;
     var retryTimer = null;
     var openCount = 0;
     var activity = Date.now();
+    var pageLeft = false;
 
     if (typeof EventSource === "undefined") {
       alert("Whoops! Your browser doesn't receive server-sent events.");
-      return {
-        reconnect: function () {},
-        lastActivity: function () {
-          return Date.now();
-        },
-      };
+      // Without events the page still gets its state once, and from the
+      // periodic refresh of the page scripts.
+      setTimeout(function () {
+        if (onOpen) {
+          onOpen(false);
+        }
+      }, 0);
+      return;
     }
 
-    function open() {
+    function close() {
       if (retryTimer !== null) {
         clearTimeout(retryTimer);
         retryTimer = null;
@@ -206,9 +217,15 @@ window.Quiz = (function () {
         source.onmessage = null;
         source.onerror = null;
         source.close();
+        source = null;
       }
+    }
+
+    function open() {
+      close();
       var current = new EventSource("/events");
       source = current;
+      activity = Date.now();
       current.onopen = function () {
         activity = Date.now();
         openCount += 1;
@@ -218,64 +235,74 @@ window.Quiz = (function () {
       };
       current.onmessage = function (event) {
         activity = Date.now();
-        onMessage(event.data);
+        if (event.data !== "ping") {
+          onMessage(event.data);
+        }
       };
       current.onerror = function () {
         if (current.readyState === EventSource.CLOSED && retryTimer === null) {
-          retryTimer = setTimeout(open, 2000);
+          retryTimer = setTimeout(update, 2000);
         }
       };
     }
 
-    open();
-    return {
-      reconnect: open,
-      lastActivity: function () {
-        return activity;
-      },
-    };
+    // Opens a fresh stream if the page is shown, closes it otherwise.
+    // A fresh one also when the page is shown again after being hidden: the
+    // old stream may have died meanwhile without the browser noticing.
+    function update() {
+      var hidden = closeWhenHidden && document.visibilityState === "hidden";
+      if (pageLeft || hidden) {
+        close();
+      } else {
+        open();
+      }
+    }
+
+    window.addEventListener("pagehide", function () {
+      pageLeft = true;
+      close();
+    });
+    window.addEventListener("pageshow", function (event) {
+      pageLeft = false;
+      if (event.persisted) {
+        update();
+      }
+    });
+    if (closeWhenHidden) {
+      document.addEventListener("visibilitychange", update);
+    }
+
+    setInterval(function () {
+      if (
+        source !== null &&
+        source.readyState === EventSource.OPEN &&
+        Date.now() - activity > SILENCE_LIMIT_MS
+      ) {
+        open();
+      }
+    }, 1000);
+
+    update();
   }
 
   var navigating = false;
 
-  // Reloads the page (`url` null) or goes to `url`, but only once the server
-  // answers. Navigating while it is unreachable would leave the browser on an
-  // error page where no script runs, and the device would be stuck.
-  // Pass `serverJustAnswered` if a request has just succeeded; then the check
-  // is skipped. Calling this again while a navigation is pending does nothing.
-  function navigateWhenReachable(url, serverJustAnswered) {
+  // Reloads the page (`url` null) or goes to `url`. Calling this again while
+  // a navigation is pending does nothing.
+  //
+  // Only call this right after a request to the server has succeeded.
+  // Navigating while the server is unreachable leaves the browser on an error
+  // page where no script runs, and the device is stuck until someone reloads
+  // it by hand.
+  function navigate(url) {
     if (navigating) {
       return;
     }
     navigating = true;
-
-    function go() {
-      if (url === null || url === undefined) {
-        window.location.reload();
-      } else {
-        window.location.href = url;
-      }
-    }
-
-    function probe() {
-      fetchWithTimeout("/ping", { cache: "no-store" }, 3000).then(
-        function (result) {
-          if (result.ok) {
-            go();
-          } else {
-            setTimeout(probe, 1000);
-          }
-        },
-        function () {
-          setTimeout(probe, 1000);
-        }
-      );
-    }
-
-    if (serverJustAnswered) {
-      go();
+    if (url === null || url === undefined) {
+      window.location.reload();
     } else {
-      probe();
+      window.location.href = url;
     }
   }
 
@@ -325,19 +352,18 @@ window.Quiz = (function () {
     } catch (error) {
       // No usable sessionStorage (private mode): reload without the safety net.
     }
-    navigateWhenReachable(null, true);
+    navigate(null);
     return false;
   }
 
   return {
-    escapeHtml: escapeHtml,
     fetchWithTimeout: fetchWithTimeout,
     fetchJson: fetchJson,
     fetchState: fetchState,
     fetchGroups: fetchGroups,
     createSync: createSync,
     connectEvents: connectEvents,
-    navigateWhenReachable: navigateWhenReachable,
+    navigate: navigate,
     pageVersion: pageVersion,
     pageIsCurrent: pageIsCurrent,
   };

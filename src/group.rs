@@ -25,7 +25,7 @@ pub async fn new_group(
     server_data: &State<ServerData>,
     group: String,
 ) -> Result<Json<NewGroupResponse>, (Status, String)> {
-    let name = validate_group_name(&group).map_err(|e| (Status::BadRequest, e.to_owned()))?;
+    let name = validate_group_name(&group).map_err(|e| (Status::BadRequest, e))?;
     let created = server_data.insert_group(name).is_ok();
     debug!("{:?}", server_data.groups);
     if created {

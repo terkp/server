@@ -119,8 +119,9 @@ function formatGroupAnswer(answer) {
   return JSON.stringify(answer);
 }
 
-// Appends a table row. The cells are inserted as text, never as HTML: group
-// names and question texts must not be able to inject markup into this page.
+// Appends a table row and returns it. This is the only way rows are built on
+// this page. The cells are inserted as text, never as HTML: group names and
+// question texts must not be able to inject markup into this page.
 function addRow(table, cells, cellTag) {
   let row = document.createElement("tr");
   for (const cell of cells) {
@@ -129,6 +130,7 @@ function addRow(table, cells, cellTag) {
     row.appendChild(cellElement);
   }
   table.appendChild(row);
+  return row;
 }
 
 // `data` is null if there is no current question, else [index, question].
@@ -223,16 +225,12 @@ function renderGroups(data) {
   addRow(groupsElem, ["Gruppe", "Score", "Antwort"], "th");
   let names = Object.keys(data).sort((a, b) => a.localeCompare(b));
   for (const name of names) {
-    let row = document.createElement("tr");
-    row.innerHTML =
-      "<td><b>" +
-      Quiz.escapeHtml(name) +
-      "</b></td><td>" +
-      Quiz.escapeHtml(data[name].score) +
-      "</td><td>" +
-      Quiz.escapeHtml(formatGroupAnswer(data[name].answer)) +
-      "</td>";
-    groupsElem.appendChild(row);
+    let row = addRow(groupsElem, [
+      name,
+      data[name].score,
+      formatGroupAnswer(data[name].answer),
+    ]);
+    row.firstChild.style.fontWeight = "bold";
   }
 }
 
@@ -374,7 +372,7 @@ function deleteGroup() {
   });
 }
 
-const quizEvents = Quiz.connectEvents((data) => {
+Quiz.connectEvents((data) => {
   if (data === "groups") {
     updateGroups();
   } else if (data === "question" || data === "resync") {
@@ -382,9 +380,10 @@ const quizEvents = Quiz.connectEvents((data) => {
   } else {
     updateQuestionState();
   }
+  // Everything is fetched whenever the connection opens, which includes the
+  // first time, so there is no separate fetch when the page loads.
 }, refreshEverything);
 
-// Safety net for everything that can make the page miss an event.
+// Safety net for everything that can make the page miss an event, and for a
+// server whose event stream cannot be reached at all.
 setInterval(refreshEverything, 15000);
-
-refreshEverything();
